@@ -16,7 +16,7 @@
 
 extern "C" void app_main();
 
-#define LAPTIMER_TASK_STACK_SIZE 2000
+#define DATA_SAMPLER_TASK_STACK_SIZE 2000
 
 #define MOSI 13
 #define MISO 12
@@ -34,14 +34,14 @@ namespace {
 const int SPI_SPEED = 2*1000*1000;
 
 
-TaskHandle_t laptimer_task_handle;
-StaticTask_t laptimer_task_buffer;
-StackType_t  laptimer_task_stack[LAPTIMER_TASK_STACK_SIZE];
+TaskHandle_t data_sampler_task_handle;
+StaticTask_t data_sampler_task_buffer;
+StackType_t  data_sampler_task_stack[DATA_SAMPLER_TASK_STACK_SIZE];
 
 std::array<uint32_t, 9> tx_buffer;
 std::array<uint32_t, 9> rx_buffer;
 
-void laptimer_task(void* data)
+void data_sampler_task(void* data)
 {
   esp_err_t ret;
   spi_device_handle_t spi;
@@ -78,7 +78,7 @@ void laptimer_task(void* data)
   ret = spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
   ESP_ERROR_CHECK(ret);
 
-  ESP_LOGI("laptimer", "laptimer task started");
+  ESP_LOGI("data_sampler", "data_sampler task started");
   for(;;)
   {
     ets_delay_us(500);
@@ -97,14 +97,14 @@ void laptimer_task(void* data)
 
 void app_main()
 {
-  laptimer_task_handle = xTaskCreateStaticPinnedToCore(
-    laptimer_task,       // Function that implements the task.
+  data_sampler_task_handle = xTaskCreateStaticPinnedToCore(
+    data_sampler_task,       // Function that implements the task.
     "LPT",          // Text name for the task.
-    LAPTIMER_TASK_STACK_SIZE,      // Stack size in bytes, not words.
+    DATA_SAMPLER_TASK_STACK_SIZE,      // Stack size in bytes, not words.
     nullptr,
     tskIDLE_PRIORITY + 1,// Priority at which the task is created.
-    laptimer_task_stack,          // Array to use as the task's stack.
-    &laptimer_task_buffer, // Variable to hold the task's data structure.
+    data_sampler_task_stack,          // Array to use as the task's stack.
+    &data_sampler_task_buffer, // Variable to hold the task's data structure.
     1 // Core 1
     );
 
