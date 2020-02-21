@@ -12,7 +12,7 @@ extern "C" void app_main();
 #define MOSI 13
 #define MISO 12
 #define CLK 14
-#define CS 27
+#define CS 15
 
 namespace {
 
@@ -37,7 +37,7 @@ void laptimer_task(void* data)
     .quadwp_io_num=-1,
     .quadhd_io_num=-1,
     .max_transfer_sz=0,
-    .flags=0,
+    .flags=SPICOMMON_BUSFLAG_NATIVE_PINS,
     .intr_flags=0
   };
 
@@ -47,7 +47,7 @@ void laptimer_task(void* data)
     .dummy_bits=0,
     .mode=0,
     .duty_cycle_pos=0,
-    .cs_ena_pretrans=0,
+    .cs_ena_pretrans=16,
     .cs_ena_posttrans=0,
     .clock_speed_hz=SPI_SPEED,
     .input_delay_ns=0,
@@ -58,9 +58,9 @@ void laptimer_task(void* data)
     .post_cb=nullptr
   };
   //Initialize the SPI bus
-  ret = spi_bus_initialize(VSPI_HOST, &buscfg, 0);
+  ret = spi_bus_initialize(HSPI_HOST, &buscfg, 0);
   ESP_ERROR_CHECK(ret);
-  ret = spi_bus_add_device(VSPI_HOST, &devcfg, &spi);
+  ret = spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
   ESP_ERROR_CHECK(ret);
 
   ESP_LOGI("laptimer", "laptimer task started");
@@ -69,7 +69,7 @@ void laptimer_task(void* data)
     ets_delay_us(500);
     spi_transaction_t t;
     t.length = 9 * 32;
-    t.rxlength = 9 * 32;
+    t.rxlength = 0;
     t.tx_buffer = tx_buffer.data();
     t.rx_buffer = rx_buffer.data();
     t.flags = 0;
