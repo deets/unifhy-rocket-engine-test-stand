@@ -3,6 +3,15 @@
 #include <freertos/task.h>
 #include <driver/spi_master.h>
 
+// Arduino stuff
+#include "SPI.h"
+#include "FS.h"
+#include "SD.h"
+#include "vfs_api.h"
+#include "sd_diskio.h"
+#include "ff.h"
+#include "FS.h"
+
 #include <array>
 
 extern "C" void app_main();
@@ -13,6 +22,12 @@ extern "C" void app_main();
 #define MISO 12
 #define CLK 14
 #define CS 15
+
+// These are the default VSPI
+// pins as found in
+// https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/peripherals/spi_master.html#gpio-matrix-and-io-mux
+// and also in the arduino specific
+// components/arduino/variants/esp32/pins_arduino.h
 
 namespace {
 
@@ -93,4 +108,33 @@ void app_main()
     1 // Core 1
     );
 
+  SPIClass spi(VSPI);
+  SDFS sd(FSImplPtr(new VFSImpl()));
+
+  if(!sd.begin(SS, spi))
+  {
+    ESP_LOGE("main", "SD card mount failed!");
+  }
+
+  const auto card_type = sd.cardType();
+  switch(card_type)
+  {
+  case CARD_NONE:
+    ESP_LOGI("main", "No SD card attached");
+    break;
+  case CARD_MMC:
+    ESP_LOGI("main", "MMC card attached");
+    break;
+  case CARD_SD:
+    ESP_LOGI("main", "SD card attached");
+    break;
+  case CARD_SDHC:
+    ESP_LOGI("main", "SDHC card attached");
+    break;
+  default:
+    ESP_LOGI("main", "No SD card attached");
+    break;
+  }
+  uint64_t cardSize = sd.cardSize() / (1024 * 1024);
+  ESP_LOGI("main", "SD Card Size: %lluMB\n", cardSize);
 }
