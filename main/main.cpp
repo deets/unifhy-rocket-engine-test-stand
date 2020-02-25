@@ -12,6 +12,8 @@
 #include "ff.h"
 #include "FS.h"
 
+#include "datalogger.hh"
+
 #include <array>
 
 extern "C" void app_main();
@@ -31,18 +33,23 @@ extern "C" void app_main();
 
 namespace {
 
+const int MAINLOOP_WAIT = 100;
+const int SDCARD_MOUNT_WAIT = 1000;
 const int SPI_SPEED = 2*1000*1000;
 
+int32_t sampled_bytes;
 
 TaskHandle_t data_sampler_task_handle;
 StaticTask_t data_sampler_task_buffer;
 StackType_t  data_sampler_task_stack[DATA_SAMPLER_TASK_STACK_SIZE];
+StaticEventGroup_t data_sampler_task_event_group;
 
 std::array<uint32_t, 9> tx_buffer;
 std::array<uint32_t, 9> rx_buffer;
 
 void data_sampler_task(void* data)
 {
+  EventGroupHandle_t eg_handle = static_cast<EventGroupHandle_t>(data);
   esp_err_t ret;
   spi_device_handle_t spi;
   spi_bus_config_t buscfg = {
@@ -78,6 +85,15 @@ void data_sampler_task(void* data)
   ret = spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
   ESP_ERROR_CHECK(ret);
 
+  // wait for our event to start
+  while(!xEventGroupWaitBits(
+          eg_handle,    // The event group being tested.
+          1,
+          pdTRUE,         // BIT_0 should be cleared before returning.
+          pdFALSE,        // Don't wait for both bits, either bit will do.
+          pdMS_TO_TICKS(1000)
+          )) {}
+
   ESP_LOGI("data_sampler", "data_sampler task started");
   for(;;)
   {
@@ -90,6 +106,7 @@ void data_sampler_task(void* data)
     t.flags = 0;
     ret = spi_device_transmit(spi, &t);  // synchronous
     ESP_ERROR_CHECK(ret);
+    sampled_bytes += 9 * 4;
   }
 }
 
@@ -97,11 +114,13 @@ void data_sampler_task(void* data)
 
 void app_main()
 {
+  auto event_group = xEventGroupCreateStatic(&data_sampler_task_event_group);
+
   data_sampler_task_handle = xTaskCreateStaticPinnedToCore(
     data_sampler_task,       // Function that implements the task.
     "LPT",          // Text name for the task.
     DATA_SAMPLER_TASK_STACK_SIZE,      // Stack size in bytes, not words.
-    nullptr,
+    event_group,
     tskIDLE_PRIORITY + 1,// Priority at which the task is created.
     data_sampler_task_stack,          // Array to use as the task's stack.
     &data_sampler_task_buffer, // Variable to hold the task's data structure.
@@ -111,9 +130,17 @@ void app_main()
   SPIClass spi(VSPI);
   SDFS sd(FSImplPtr(new VFSImpl()));
 
-  if(!sd.begin(SS, spi))
+  for(;;)
   {
-    ESP_LOGE("main", "SD card mount failed!");
+    vTaskDelay(pdMS_TO_TICKS(SDCARD_MOUNT_WAIT));
+    if(!sd.begin(SS, spi))
+    {
+      ESP_LOGE("main", "SD card mount failed, retrying!");
+    }
+    else
+    {
+      break;
+    }
   }
 
   const auto card_type = sd.cardType();
@@ -137,4 +164,21 @@ void app_main()
   }
   uint64_t cardSize = sd.cardSize() / (1024 * 1024);
   ESP_LOGI("main", "SD Card Size: %lluMB\n", cardSize);
+
+  DataLogger logger(sd);
+
+  std::vector<uint8_t> buffer;
+  xEventGroupSetBits(event_group, 1);
+  for( ;; )
+  {
+    const auto bytes_to_transfer = sampled_bytes;
+    if(buffer.capacity() < bytes_to_transfer)
+    {
+      ESP_LOGI("main", "resizing buffer %i", bytes_to_transfer);
+      buffer.resize(bytes_to_transfer);
+    }
+    logger.write(buffer);
+    sampled_bytes -= bytes_to_transfer;
+    vTaskDelay(pdMS_TO_TICKS(MAINLOOP_WAIT));
+  }
 }
