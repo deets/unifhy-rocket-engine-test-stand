@@ -2,6 +2,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/spi_master.h>
+#include <nvs_flash.h>
 
 // Arduino stuff
 #include "SPI.h"
@@ -11,6 +12,7 @@
 #include "sd_diskio.h"
 #include "ff.h"
 #include "FS.h"
+#include <WiFi.h>
 
 #include "datalogger.hh"
 
@@ -25,7 +27,11 @@ extern "C" void app_main();
 #define CLK 14
 #define CS 15
 
-// These are the default VSPI
+#define SSID "TP-LINK_2.4GHz_BBADE9"
+#define PASSWORD "51790684"
+#define HOST "192.168.2.105"
+
+// We use the default VSPI
 // pins as found in
 // https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/peripherals/spi_master.html#gpio-matrix-and-io-mux
 // and also in the arduino specific
@@ -35,6 +41,7 @@ namespace {
 
 const int MAINLOOP_WAIT = 100;
 const int SDCARD_MOUNT_WAIT = 1000;
+const int WIFI_WAIT = 500;
 const int SPI_SPEED = 2*1000*1000;
 
 int32_t sampled_bytes;
@@ -46,6 +53,8 @@ StaticEventGroup_t data_sampler_task_event_group;
 
 std::array<uint32_t, 9> tx_buffer;
 std::array<uint32_t, 9> rx_buffer;
+
+decltype(esp_timer_get_time()) sample_period;
 
 void data_sampler_task(void* data)
 {
@@ -95,6 +104,8 @@ void data_sampler_task(void* data)
           )) {}
 
   ESP_LOGI("data_sampler", "data_sampler task started");
+  auto last = esp_timer_get_time();
+
   for(;;)
   {
     ets_delay_us(500);
@@ -104,9 +115,30 @@ void data_sampler_task(void* data)
     t.tx_buffer = tx_buffer.data();
     t.rx_buffer = rx_buffer.data();
     t.flags = 0;
-    ret = spi_device_transmit(spi, &t);  // synchronous
+    ret = spi_device_polling_transmit(spi, &t);  // synchronous
     ESP_ERROR_CHECK(ret);
     sampled_bytes += 9 * 4;
+    auto now = esp_timer_get_time();
+    sample_period = now - last;
+    last = now;
+  }
+}
+
+void connect_wifi(WiFiClient& client)
+{
+  ESP_LOGI("main", "connecting to WiFi");
+  WiFi.begin(SSID, PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    vTaskDelay(pdMS_TO_TICKS(WIFI_WAIT));
+    ESP_LOGI("main", "...connecting");
+  }
+  ESP_LOGI("main", "connected");
+
+  const int httpPort = 10000;
+  if (!client.connect(HOST, httpPort)) {
+    ESP_LOGI("main", "connection to host failed");
+    return;
   }
 }
 
@@ -114,6 +146,8 @@ void data_sampler_task(void* data)
 
 void app_main()
 {
+  nvs_flash_init();
+
   auto event_group = xEventGroupCreateStatic(&data_sampler_task_event_group);
 
   data_sampler_task_handle = xTaskCreateStaticPinnedToCore(
@@ -142,6 +176,8 @@ void app_main()
       break;
     }
   }
+  WiFiClient client;
+  connect_wifi(client);
 
   const auto card_type = sd.cardType();
   switch(card_type)
@@ -167,16 +203,32 @@ void app_main()
 
   DataLogger logger(sd);
 
+  std::vector<uint8_t> wifi_buffer;
   std::vector<uint8_t> buffer;
   xEventGroupSetBits(event_group, 1);
+  decltype(sample_period) max_period = 0;
   for( ;; )
   {
-    const auto bytes_to_transfer = sampled_bytes;
+    auto bytes_to_transfer = sampled_bytes;
+    if(sample_period > max_period)
+    {
+      max_period = sample_period;
+      ESP_LOGE("main", "max sample period: %llu", max_period);
+    }
+
     if(buffer.capacity() < bytes_to_transfer)
     {
+      bytes_to_transfer = std::min(bytes_to_transfer, 100000);
       ESP_LOGI("main", "resizing buffer %i", bytes_to_transfer);
       buffer.resize(bytes_to_transfer);
+      wifi_buffer.resize(bytes_to_transfer / 10);
     }
+    ESP_LOGI("main", "wifi buffer size: %i", wifi_buffer.size());
+    if(client.connected())
+    {
+      client.write(wifi_buffer.data(), wifi_buffer.size());
+    }
+
     logger.write(buffer);
     sampled_bytes -= bytes_to_transfer;
     vTaskDelay(pdMS_TO_TICKS(MAINLOOP_WAIT));
