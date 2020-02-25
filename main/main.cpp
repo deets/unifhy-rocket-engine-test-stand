@@ -108,7 +108,7 @@ void data_sampler_task(void* data)
 
   for(;;)
   {
-    ets_delay_us(500);
+    const auto before = esp_timer_get_time();
     spi_transaction_t t;
     t.length = 9 * 32;
     t.rxlength = 0;
@@ -118,9 +118,15 @@ void data_sampler_task(void* data)
     ret = spi_device_polling_transmit(spi, &t);  // synchronous
     ESP_ERROR_CHECK(ret);
     sampled_bytes += 9 * 4;
+
     auto now = esp_timer_get_time();
     sample_period = now - last;
     last = now;
+    const auto delay = 500 - (now - before);
+    if(delay > 0)
+    {
+      ets_delay_us(delay);
+    }
   }
 }
 
@@ -218,7 +224,7 @@ void app_main()
 
     if(buffer.capacity() < bytes_to_transfer)
     {
-      bytes_to_transfer = std::min(bytes_to_transfer, 100000);
+      bytes_to_transfer = std::min(bytes_to_transfer, 50000);
       ESP_LOGI("main", "resizing buffer %i", bytes_to_transfer);
       buffer.resize(bytes_to_transfer);
       wifi_buffer.resize(bytes_to_transfer / 10);
