@@ -8,8 +8,8 @@ DataLogger::DataLogger(SDFS& sd)
   _logfile = sd.open(path, FILE_WRITE);
 }
 
-void DataLogger::write(const std::vector<uint8_t>& data)
+void DataLogger::write(const char* string)
 {
-  _logfile.write(data.data(), data.size());
+  _logfile.write(reinterpret_cast<const uint8_t*>(string), strlen(string));
   _logfile.flush();
 }

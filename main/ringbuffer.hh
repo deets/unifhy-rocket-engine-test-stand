@@ -53,7 +53,12 @@ public:
 
     bool overrun() const
     {
-      return (_buffer->_total_writes - _total_reads) >= N;
+      return overrun_count() > N;
+    }
+
+    int overrun_count() const
+    {
+      return (_buffer->_total_writes - _total_reads) / N;
     }
 
   private:
