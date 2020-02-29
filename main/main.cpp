@@ -69,7 +69,7 @@ void app_main()
   for(;;)
   {
     vTaskDelay(pdMS_TO_TICKS(SDCARD_MOUNT_WAIT));
-    if(!sd.begin(SS, spi))
+    if(!sd.begin(SS, spi, 16000000))
     {
       ESP_LOGE("main", "SD card mount failed, retrying!");
     }
@@ -103,29 +103,24 @@ void app_main()
   uint64_t cardSize = sd.cardSize() / (1024 * 1024);
   ESP_LOGI("main", "SD Card Size: %lluMB\n", cardSize);
 
-  DataLogger logger(sd);
+  auto sd_card_logger = std::unique_ptr<DataLogger>(new DataLogger(sd));
+  auto sd_card_logger_reader = data_sampler->reader();
 
-  std::vector<DataSampler::value_t> buffer;
-
-  auto sd_card_buffer_reader = data_sampler->reader();
   data_sampler->start();
-  logger.write("-----START-----");
   for( ;; )
   {
-    ESP_LOGI("main", "loop, buffer size: %i, overrun: %i", buffer.capacity(), sd_card_buffer_reader.overrun_count());
-    buffer.clear();
-    sd_card_buffer_reader.consume(
-      [&buffer](const DataSampler::value_t& adc_values)
+    ESP_LOGI("main", "overrun: %i", sd_card_logger_reader.overrun_count());
+    sd_card_logger_reader.consume(
+      [&sd_card_logger](const DataSampler::value_t& adc_values)
       {
-        buffer.push_back(adc_values);
+        sd_card_logger->log(adc_values);
       }
       );
+    sd_card_logger->flush();
     // if(client.connected())
     // {
     //   client.write(wifi_buffer.data(), wifi_buffer.size());
     // }
-
-    logger.write(buffer);
     vTaskDelay(pdMS_TO_TICKS(MAINLOOP_WAIT));
   }
 }

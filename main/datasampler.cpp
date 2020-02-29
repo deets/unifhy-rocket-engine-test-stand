@@ -4,6 +4,7 @@
 #include <driver/spi_master.h>
 #include <esp_log.h>
 #include <array>
+#include <sstream>
 
 #define DATA_SAMPLER_TASK_STACK_SIZE 2000
 
@@ -132,4 +133,20 @@ void DataSampler::task()
 DataSampler::reader_t DataSampler::reader()
 {
   return _buffer.reader();
+}
+
+
+const char* to_log_string(const adc_values_t& v)
+{
+  static std::stringstream buffer;
+  static std::string res;
+  buffer.seekp(0);
+  buffer.seekg(0);
+  buffer.clear();
+  buffer << "adc:" << std::hex << std::get<0>(v) << ":";
+  buffer << std::get<1>(v) << ":" << std::get<2>(v) << ":" << std::get<3>(v) << ":" << std::get<4>(v) << ":";
+  buffer << std::get<5>(v) << ":" << std::get<6>(v) << ":" << std::get<7>(v) << ":" << std::get<8>(v);
+  buffer << "\n";
+  res = buffer.str();
+  return res.c_str();
 }

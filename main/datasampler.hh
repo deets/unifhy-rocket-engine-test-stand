@@ -12,7 +12,7 @@
 // 40 Bytes
 using adc_values_t = std::tuple<uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>;
 
-constexpr int RING_BUFFER_SIZE = 500;
+constexpr int RING_BUFFER_SIZE = 1000;
 
 class DataSampler
 {
@@ -36,3 +36,5 @@ private:
 
   ring_buffer_t _buffer;
 };
+
+const char* to_log_string(const adc_values_t&);

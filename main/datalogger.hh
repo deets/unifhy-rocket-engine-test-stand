@@ -2,6 +2,7 @@
 #pragma once
 #include "SD.h"
 #include <vector>
+#include "datasampler.hh"
 
 class DataLogger
 {
@@ -9,13 +10,12 @@ public:
   DataLogger(SDFS&);
 
   void write(const char* string);
+  void flush();
 
-  template<typename BufferType>
-  void write(const BufferType& data)
+  template<typename Item>
+  void log(const Item& data)
   {
-    const auto data_p = reinterpret_cast<const uint8_t*>(data.data());
-    _logfile.write(data_p, data.size() * sizeof(typename BufferType::value_type));
-    _logfile.flush();
+    write(to_log_string(data));
   }
 
 private:
