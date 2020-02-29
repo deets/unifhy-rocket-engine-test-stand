@@ -11,5 +11,10 @@ DataLogger::DataLogger(SDFS& sd)
 void DataLogger::write(const char* string)
 {
   _logfile.write(reinterpret_cast<const uint8_t*>(string), strlen(string));
+}
+
+
+void DataLogger::flush()
+{
   _logfile.flush();
 }
