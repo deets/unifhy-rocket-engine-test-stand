@@ -8,14 +8,6 @@
 #include <driver/spi_master.h>
 #include <nvs_flash.h>
 
-// Arduino stuff
-#include "SPI.h"
-#include "FS.h"
-#include "SD.h"
-#include "vfs_api.h"
-#include "sd_diskio.h"
-#include "ff.h"
-#include "FS.h"
 #include <WiFi.h>
 
 extern "C" void app_main();
@@ -40,7 +32,6 @@ extern "C" void app_main();
 namespace {
 
 const int MAINLOOP_WAIT = 100;
-const int SDCARD_MOUNT_WAIT = 1000;
 const int WIFI_WAIT = 500;
 
 
@@ -70,60 +61,11 @@ void app_main()
 
   auto data_sampler = std::unique_ptr<DataSampler>(new DataSampler());
 
-  SPIClass spi(VSPI);
-  SDFS sd(FSImplPtr(new VFSImpl()));
-
-  for(;;)
-  {
-    vTaskDelay(pdMS_TO_TICKS(SDCARD_MOUNT_WAIT));
-    if(!sd.begin(SS, spi, 16000000))
-    {
-      ESP_LOGE("main", "SD card mount failed, retrying!");
-    }
-    else
-    {
-      break;
-    }
-  }
-  // WiFiClient client;
-  // connect_wifi(client);
-
-  const auto card_type = sd.cardType();
-  switch(card_type)
-  {
-  case CARD_NONE:
-    ESP_LOGI("main", "No SD card attached");
-    break;
-  case CARD_MMC:
-    ESP_LOGI("main", "MMC card attached");
-    break;
-  case CARD_SD:
-    ESP_LOGI("main", "SD card attached");
-    break;
-  case CARD_SDHC:
-    ESP_LOGI("main", "SDHC card attached");
-    break;
-  default:
-    ESP_LOGI("main", "No SD card attached");
-    break;
-  }
-  uint64_t cardSize = sd.cardSize() / (1024 * 1024);
-  ESP_LOGI("main", "SD Card Size: %lluMB\n", cardSize);
-
-  auto sd_card_logger = std::unique_ptr<DataLogger>(new DataLogger(sd));
-  auto sd_card_logger_reader = data_sampler->reader();
+  auto sd_card_logger = std::unique_ptr<DataLogger>(new DataLogger(*data_sampler));
 
   data_sampler->start();
   for( ;; )
   {
-    ESP_LOGI("main", "overrun: %i", sd_card_logger_reader.overrun_count());
-    sd_card_logger_reader.consume(
-      [&sd_card_logger](const DataSampler::value_t& adc_values)
-      {
-        sd_card_logger->log(adc_values);
-      }
-      );
-    sd_card_logger->flush();
     // if(client.connected())
     // {
     //   client.write(wifi_buffer.data(), wifi_buffer.size());

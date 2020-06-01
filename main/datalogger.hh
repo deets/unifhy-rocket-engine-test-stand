@@ -1,24 +1,18 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
 #pragma once
+#include "task.hh"
+
 #include "SD.h"
 #include <vector>
 #include "datasampler.hh"
 
-class DataLogger
+
+class DataLogger : public Task<DataLogger, 2000>
 {
 public:
-  DataLogger(SDFS&);
-
-  void write(const char* string);
-  void flush();
-
-  template<typename Item>
-  void log(const Item& data)
-  {
-    write(to_log_string(data));
-  }
+  DataLogger(DataSampler& sampler);
+  void task();
 
 private:
-  SDFS& _sd;
-  File _logfile;
+  DataSampler& _sampler;
 };
