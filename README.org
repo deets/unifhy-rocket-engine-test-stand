@@ -1,0 +1,14 @@
+* UNIFHY - universeller Prüfstand für Feststoff- und Hybridmotoren
+
+Ziel dieses Projektes ist die Entwicklung eines preiswerten
+Prüfstandes mit einem Preis von maximal 500 EUR.
+
+Der Prüfstand besteht aus drei Modulen:
+
+ - Modul 1: einem aus ITEM Prüfbalken bestehenden mechanischen Aufbau.
+ - Modul 2: einer Prüfbox zur Datenaufnahme, Speicherung, Übermittlung und
+   gegebenenfalls Fernsteuerung.
+ - Modul 3: einer Software zur Konfiguration, Datenerfassung und Auswertung von Modul 2.
+
+
+Hier die [[file:doc/Pruefstand_UNIFHY.pdf][Anforderungen erhoben am 22.02.2020]].
