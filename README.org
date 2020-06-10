@@ -12,3 +12,14 @@ Der Prüfstand besteht aus drei Modulen:
 
 
 Hier die [[file:doc/Pruefstand_UNIFHY.pdf][Anforderungen erhoben am 22.02.2020]].
+
+** GIT Konfiguration
+
+Wir arbeiten mit einem [[https://medium.com/singlestone/a-git-workflow-using-rebase-1b1210de83e5][rebase]] basierten GIT workflow. Dazu ist es
+hilfreich eine Reihe von Einstellungen vorzunehmen. Die folgenden
+Kommandos werden in einer Shell eingegeben, und man muss sich in
+der Arbeitskopie befinden:
+
+#+begin_src bash
+git config pull.rebase true
+#+end_src
