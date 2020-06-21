@@ -13,6 +13,16 @@ Der Prüfstand besteht aus drei Modulen:
 
 Hier die [[file:doc/Pruefstand_UNIFHY.pdf][Anforderungen erhoben am 22.02.2020]].
 
+** Modul 1 - Teststand
+
+Ein Aufbau des Testands von Andreas:
+
+[[./doc/Teststand-Totale.jpg]]
+
+[[./doc/Hybrid-Haengend.jpg]]
+
+[[./doc/Test-mit-laufendem-Motor.jpg]]
+
 ** GIT Konfiguration
 
 Wir arbeiten mit einem [[https://medium.com/singlestone/a-git-workflow-using-rebase-1b1210de83e5][rebase]] basierten GIT workflow. Dazu ist es
