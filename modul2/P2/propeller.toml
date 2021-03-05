@@ -1,0 +1,9 @@
+[project]
+main-file="spin/hello-p2.spin"
+libraries=[
+  "~/software/vc/propeller/libraries/community/p2/All/jm_full_duplex_serial"
+]
+
+[propeller]
+kind="P2"
+serial-device="/dev/serial/by-id/usb-Parallax_Inc_Propeller_P2-EVAL_PLX4L28HW-if00-port0"
