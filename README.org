@@ -23,6 +23,30 @@ Ein Aufbau des Testands von Andreas:
 
 [[./doc/Test-mit-laufendem-Motor.jpg]]
 
+** Modul 2 - Firmware
+
+*** ADS1256 Breakout Board
+
+Pin out of the breakout board as seen from top with control interface
+to the left:
+
+|-----+----------|
+| Pin | Function |
+|-----+----------|
+|   1 | PDWN     |
+|   2 | CS_      |
+|   3 | DRDY     |
+|   4 | DOUT     |
+|   5 | DIN      |
+|   6 | SCLK     |
+|   7 | GND      |
+|   8 | 5V       |
+|-----+----------|
+
+#+attr_html: :width 400 px
+[[file:doc/ads1256-breakout.jpg]]
+
+
 ** GIT Konfiguration
 
 Wir arbeiten mit einem [[https://medium.com/singlestone/a-git-workflow-using-rebase-1b1210de83e5][rebase]] basierten GIT workflow. Dazu ist es
