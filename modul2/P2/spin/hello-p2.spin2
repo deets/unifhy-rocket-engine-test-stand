@@ -4,15 +4,28 @@ con
   RX1     = 35  { I }                                           ' programming / debug
   TX1     = 37  { O }
   BR_TERM  = 115_200                                            ' terminal baud rate
-  
+
+  ADC_CLK = 16
+  ADC_SDO = 17
+  ADC_SDI = 18
+  ADC_DRDY = 19
+  ADC_CS = 20
+
+  ' ADC_CLK = 24
+  ' ADC_SDO = 26
+  ' ADC_SDI = 28
+
 obj
   term : "jm_fullduplexserial"
+  adc : "ads1256"
   
-pub main
+pub main | status
   term.start(RX1, TX1, %0000, BR_TERM)
+  adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS)
   repeat
     pintoggle(56)
-    term.fstr0(string("It's working!\r\n"))
-    waitms(250)
+    status := adc.read_register(adc.STATUS, 4)
+    term.fstr1(string("ADC status register: %8x\r\n"), status)
+    ' waitms(250)
       
           

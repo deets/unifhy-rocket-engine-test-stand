@@ -1,0 +1,26 @@
+con
+  ADC_SPEED = 1_500 ' KHz
+  RREG = $10
+
+  STATUS = $00
+  MUX = $01
+var
+  byte cspin_
+obj
+  spi : "jm_ez_spi"
+
+pub start(sdipin, sdopin, sckpin, cspin) : result
+  cspin_ := cspin
+  pinhigh(cspin_)
+  return spi.start(sdipin, sdopin, sckpin, ADC_SPEED)
+  
+
+pub read_register(start, count): result | h
+  h := ((RREG | start) << 8) | count - 1
+  pinlow(cspin_)
+  spi.shiftout(spi.MSBFIRST, h, 16)
+  waitus(6) ' this should be t6 according to the datasheet
+  result := spi.shiftin(spi.MSBFIRST, 8 * count)
+  pinhigh(cspin_)
+  return result
+  

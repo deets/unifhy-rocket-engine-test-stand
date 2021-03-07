@@ -1,7 +1,8 @@
 [project]
-main-file="spin/hello-p2.spin"
+main-file="spin/hello-p2.spin2"
 libraries=[
-  "~/software/vc/propeller/libraries/community/p2/All/jm_full_duplex_serial"
+  "~/software/vc/propeller/libraries/community/p2/All/jm_full_duplex_serial",
+  "~/software/vc/propeller/libraries/community/p2/All/jm_ez_spi",
 ]
 
 [propeller]
