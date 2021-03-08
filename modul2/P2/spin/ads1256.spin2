@@ -5,7 +5,7 @@ con
 
   #0, STATUS, MUX, ADCON, DRATE, IO, OFC0, OFC1, OFC2, FSC0, FSC1, FSC2
 
-  T6 = 6 ' 50 * 1/7.68Mhz -> ~6.5 us, together with call overhead enough
+  T6 = 7 ' 50 * 1/7.68Mhz -> ~6.5 us
 var
   byte cspin, drdy, pdwn
 obj
@@ -17,14 +17,13 @@ pub start(sdipin, sdopin, sckpin, cspin_, drdy_, pdwn_) : result
   pdwn := pdwn_
 
   result := spi.start(sdipin, sdopin, sckpin, ADC_SPEED, ADC_CPHA, 0)
+
   if result
     pinhigh(cspin)
     pinlow(pdwn)
     waitus(100)
     pinhigh(pdwn)
     reset
-    wreg(STATUS, 0)
-    wreg(DRATE, %10100001) ' 1000 SPS
   return result
 
 pub read_register(start, count): result | h
@@ -45,11 +44,14 @@ pub read_single_sided(channel): result | mux_value
   repeat 1
     drdycycle
   result := rdata
-  return result
 
 pub wreg(register, value) | h
   h := (%0101_0000 | register) << 8 | 0 ' count -1
   pinlow(cspin)
+  ' this was from the arduino-code: it seems
+  ' we need to really wait until drdy is 0 to
+  ' write to the registers.
+  repeat until pinread(drdy) == 0
   spi.shiftout(spi.MSBFIRST, h, 16)
   spi.shiftout(spi.MSBFIRST, value, 8)
   pinhigh(cspin)
@@ -66,7 +68,6 @@ pri reset
 
 pri cmd(value)
   pinlow(cspin)
-  waitus(50) ' cargo cult?
   spi.shiftout(spi.MSBFIRST, value, 8)
   pinhigh(cspin)
 

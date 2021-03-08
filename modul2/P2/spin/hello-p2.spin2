@@ -20,10 +20,15 @@ obj
 pub main | a, b, c, channel
   term.start(RX1, TX1, %0000, BR_TERM)
   adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN)
+
+
   pinlow(TRIGGER)
+  pinhigh(TRIGGER)
+  adc.wreg(adc.DRATE, %00000011) ' 2.5SPS
+  a := adc.read_register(adc.DRATE, 1)
+  term.fstr1(string("ADC DRATE \%%8.8b\r\n"), a) ', b, c)
+
   repeat
-    pinhigh(TRIGGER)
     repeat channel from 0 to 0
         a := adc.read_single_sided(channel)
         term.fstr2(string("ADC channel %x: %8x\r\n"), channel, a)
-    pinlow(TRIGGER)
