@@ -1,26 +1,84 @@
 con
   ADC_SPEED = 1_500 ' KHz
+  ADC_CPHA = 1
   RREG = $10
 
-  STATUS = $00
-  MUX = $01
+  #0, STATUS, MUX, ADCON, DRATE, IO, OFC0, OFC1, OFC2, FSC0, FSC1, FSC2
+
+  T6 = 6 ' 50 * 1/7.68Mhz -> ~6.5 us, together with call overhead enough
 var
-  byte cspin_
+  byte cspin, drdy, pdwn
 obj
   spi : "jm_ez_spi"
 
-pub start(sdipin, sdopin, sckpin, cspin) : result
-  cspin_ := cspin
-  pinhigh(cspin_)
-  return spi.start(sdipin, sdopin, sckpin, ADC_SPEED)
-  
+pub start(sdipin, sdopin, sckpin, cspin_, drdy_, pdwn_) : result
+  cspin := cspin_
+  drdy := drdy_
+  pdwn := pdwn_
+
+  result := spi.start(sdipin, sdopin, sckpin, ADC_SPEED, ADC_CPHA, 0)
+  if result
+    pinhigh(cspin)
+    pinlow(pdwn)
+    waitus(100)
+    pinhigh(pdwn)
+    reset
+    wreg(STATUS, 0)
+    wreg(DRATE, %10100001) ' 1000 SPS
+  return result
 
 pub read_register(start, count): result | h
   h := ((RREG | start) << 8) | count - 1
-  pinlow(cspin_)
+  pinlow(cspin)
+  waitus(50) ' cargo cult?
   spi.shiftout(spi.MSBFIRST, h, 16)
-  waitus(6) ' this should be t6 according to the datasheet
+  waitus(T6)
   result := spi.shiftin(spi.MSBFIRST, 8 * count)
-  pinhigh(cspin_)
+  pinhigh(cspin)
   return result
-  
+
+pub read_single_sided(channel): result | mux_value
+  mux_value := (channel << 4) | (1 << 3) ' AIN-channel and AINCOM
+  wreg(MUX, mux_value)
+  sync
+  wakeup
+  repeat 1
+    drdycycle
+  result := rdata
+  return result
+
+pub wreg(register, value) | h
+  h := (%0101_0000 | register) << 8 | 0 ' count -1
+  pinlow(cspin)
+  spi.shiftout(spi.MSBFIRST, h, 16)
+  spi.shiftout(spi.MSBFIRST, value, 8)
+  pinhigh(cspin)
+
+pri sync
+  cmd($FC)
+
+pri wakeup
+  cmd($FF)
+
+pri reset
+  cmd($FE)
+  waitus(100)
+
+pri cmd(value)
+  pinlow(cspin)
+  waitus(50) ' cargo cult?
+  spi.shiftout(spi.MSBFIRST, value, 8)
+  pinhigh(cspin)
+
+pri rdata: result
+  ' this assumes we waited for DRDY 0!
+  pinlow(cspin)
+  spi.shiftout(spi.MSBFIRST, $01, 8)
+  waitus(T6)
+  result := spi.shiftin(spi.MSBFIRST, 3 * 8)
+  pinhigh(cspin)
+  return result
+
+pri drdycycle
+  repeat until pinread(drdy) > 0
+  repeat until pinread(drdy) == 0

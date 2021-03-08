@@ -1,6 +1,6 @@
 con
   _clkfreq = 160_000_000
-  
+
   RX1     = 35  { I }                                           ' programming / debug
   TX1     = 37  { O }
   BR_TERM  = 115_200                                            ' terminal baud rate
@@ -10,22 +10,20 @@ con
   ADC_SDI = 18
   ADC_DRDY = 19
   ADC_CS = 20
+  ADC_PDWN = 21
 
-  ' ADC_CLK = 24
-  ' ADC_SDO = 26
-  ' ADC_SDI = 28
-
+  TRIGGER = 22
 obj
   term : "jm_fullduplexserial"
   adc : "ads1256"
-  
-pub main | status
+
+pub main | a, b, c, channel
   term.start(RX1, TX1, %0000, BR_TERM)
-  adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS)
+  adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN)
+  pinlow(TRIGGER)
   repeat
-    pintoggle(56)
-    status := adc.read_register(adc.STATUS, 4)
-    term.fstr1(string("ADC status register: %8x\r\n"), status)
-    ' waitms(250)
-      
-          
+    pinhigh(TRIGGER)
+    repeat channel from 0 to 0
+        a := adc.read_single_sided(channel)
+        term.fstr2(string("ADC channel %x: %8x\r\n"), channel, a)
+    pinlow(TRIGGER)
