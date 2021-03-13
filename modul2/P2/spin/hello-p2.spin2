@@ -15,7 +15,7 @@ con
   TRIGGER = 22
 obj
   term : "jm_fullduplexserial"
-  adc : "ads1256"
+  adc : "buffered_ads1256"
 
 pub main | a, b, c, channel
   term.start(RX1, TX1, %0000, BR_TERM)

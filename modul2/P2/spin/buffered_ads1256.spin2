@@ -1,0 +1,65 @@
+con
+  ' mirror the ones of the underlying object
+  #0, STATUS, MUX, ADCON, DRATE, IO, OFC0, OFC1, OFC2, FSC0, FSC1, FSC2
+  #100, IWREG, IRREG, IRSSC
+
+  RX1     = 35  { I }                                           ' programming / debug
+  TX1     = 37  { O }
+  BR_TERM  = 115_200                                            ' terminal baud rate
+
+var
+  long cog
+  long stack[128]
+  long instruction
+  long a, b
+obj
+  adc : "ads1256"
+  'term : "jm_fullduplexserial"
+
+pub start(sdi, sdo, clk, cs, drdy, pdwn) : result
+  cog := cogspin(NEWCOG, main(sdi, sdo, clk, cs, drdy, pdwn, cogid()), @stack)
+  waitatn
+  return cog + 1
+
+pub wreg(register, value)
+  instruction := IWREG
+  a := register
+  b := value
+  cogatn(1 << cog)
+  waitatn
+
+pub read_register(start, count): result
+  instruction := IRREG
+  a := start
+  b := count
+  cogatn(1 << cog)
+  waitatn
+  return a
+
+pub read_single_sided(channel): result
+  instruction := IRSSC
+  a := channel
+  cogatn(1 << cog)
+  waitatn
+  return a
+
+
+pri main(sdi, sdo, clk, cs, drdy, pdwn, caller_cog)
+  'term.start(RX1, TX1, %0000, BR_TERM)
+  'term.fstr0(string("cog running\r\n"))
+  adc.start(sdi, sdo, clk, cs, drdy, pdwn)
+  repeat
+    cogatn(1 << caller_cog)
+    waitatn
+    'term.fstr0(string("got instruction\r\n"))
+
+    case instruction
+       IWREG:
+        'term.fstr0(string("instruction: IWREG\r\n"))
+        adc.wreg(a, b)
+       IRREG:
+        a := adc.read_register(a, b)
+        'term.fstr1(string("instruction: IRREG: \%%8.8b\r\n"), a)
+       IRSSC:
+        a := adc.read_single_sided(a)
+        'term.fstr1(string("instruction: IRSSC: %8x\r\n"), a)
