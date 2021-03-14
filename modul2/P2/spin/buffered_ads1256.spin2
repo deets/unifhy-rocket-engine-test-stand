@@ -1,6 +1,6 @@
 con
   ' mirror the ones of the underlying object
-  #0, STATUS, MUX, ADCON, DRATE, IO, OFC0, OFC1, OFC2, FSC0, FSC1, FSC2
+  #0, RSTATUS, RMUX, RADCON, RDRATE, RIO, ROFC0, ROFC1, ROFC2, RFSC0, RFSC1, RFSC2
   #100, IWREG, IRREG, IRSSC, ICDAC
 
   RX1     = 35  { I }                                           ' programming / debug
@@ -18,7 +18,7 @@ obj
   adc : "ads1256"
   'term : "jm_fullduplexserial"
 
-pub start(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address) : result
+pub start(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address_) : result
   ' The protocol for the output_buffer_address is as follows:
   '
   ' It points to a buffer of longs. The first two longs are
@@ -26,8 +26,8 @@ pub start(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address) : result
   ' elements. On start we expect the read position to hold the
   ' size of the ring-buffer, but in double-longs! This
   ' is due to each entry being a (timestamp, mux:value)
-  cog := cogspin(NEWCOG, main(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address, cogid()), @stack)
-  waitatn
+  cog := cogspin(NEWCOG, main(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address_, cogid()), @stack)
+  waitatn()
   return cog + 1
 
 pub wreg(register, value)
@@ -35,21 +35,21 @@ pub wreg(register, value)
   a := register
   b := value
   cogatn(1 << cog)
-  waitatn
+  waitatn()
 
 pub rreg(start, count): result
   instruction := IRREG
   a := start
   b := count
   cogatn(1 << cog)
-  waitatn
+  waitatn()
   return a
 
 pub read_single_sided(channel): result
   instruction := IRSSC
   a := channel
   cogatn(1 << cog)
-  waitatn
+  waitatn()
   return a
 
 pub start_continuous_read(mux_buffer_address, mux_buffer_size)
@@ -62,8 +62,8 @@ pub start_continuous_read(mux_buffer_address, mux_buffer_size)
   b := mux_buffer_size
   cogatn(1 << cog)
 
-pub read_continuous | rpos, timestamp, mux, value
-  repeat until available > 0
+pub read_continuous() : timestamp, mux, value | rpos
+  repeat until available() > 0
   rpos := LONG[output_buffer_address][0]
   ' +2 to skip read/write, << 1 adjusts for our 2-long entry size
   timestamp := LONG[output_buffer_address][2 + (rpos << 1)]
@@ -73,7 +73,7 @@ pub read_continuous | rpos, timestamp, mux, value
   LONG[output_buffer_address][0] := (rpos + 1) +// output_buffer_size
   return timestamp, mux, value
 
-pub available: result
+pub available(): result
   ' (write + size - read) % size
   result := (LONG[output_buffer_address][1] + output_buffer_size - LONG[output_buffer_address][0]) +// output_buffer_size
   return result
@@ -89,7 +89,7 @@ pri main(sdi, sdo, clk, cs, drdy, pdwn, output_buffer_address_, caller_cog)
   adc.start(sdi, sdo, clk, cs, drdy, pdwn)
   repeat
     cogatn(1 << caller_cog)
-    waitatn
+    waitatn()
     'term.fstr0(string("got instruction\r\n"))
 
     case instruction
@@ -114,30 +114,30 @@ pri cdac(mux_buffer_address, mux_buffer_size) | last_mux, buf_pos, now, value
       ' the datasheet. Instead just read following
       ' drdy
       adc.wreg(adc.MUX, last_mux)
-      adc.sync
-      adc.wakeup
-      repeat until pollatn == -1
-        adc.drdycycle
-        now := cnt
-        value := adc.rdata
+      adc.sync()
+      adc.wakeup()
+      repeat until pollatn() == -1
+        adc.drdycycle()
+        now := cnt()
+        value := adc.rdata()
         'term.fstr2(string("ICDAC MUX 0x%2.2x: %8x\r\n"), last_mux, value)
     else
       buf_pos := 1
       adc.wreg(adc.MUX, last_mux)
-      adc.sync
-      adc.wakeup
-      repeat until pollatn == -1
-        adc.drdycycle
-        now := cnt
+      adc.sync()
+      adc.wakeup()
+      repeat until pollatn() == -1
+        adc.drdycycle()
+        now := cnt()
         ' we first instruct the adc
         ' to change the input, as this allows
         ' it to settle and sample while
         ' the last read value is still retained
         adc.wreg(adc.MUX, BYTE[mux_buffer_address][buf_pos])
-        adc.sync
-        adc.wakeup
+        adc.sync()
+        adc.wakeup()
         ' only now we read the data + put it out
-        value := adc.rdata
+        value := adc.rdata()
         'term.fstr2(string("ICDAC MUX 0x%2.2x: %8x\r\n"), last_mux, value)
         store(now, last_mux, value)
         'term.fstr1(string("ICDAC wpos %8.8x\r\n"), LONG[output_buffer_address][1])

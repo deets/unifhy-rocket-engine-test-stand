@@ -26,7 +26,7 @@ pub start(sdipin, sdopin, sckpin, cs_pin_, drdy_pin_, pdwn_pin_) : result
     pinlow(pdwn_pin)
     waitus(100)
     pinhigh(pdwn_pin)
-    reset
+    reset()
   return result
 
 pub rreg(start, count): result | h
@@ -43,11 +43,11 @@ pub rreg(start, count): result | h
 pub read_single_sided(channel): result | mux_value
   mux_value := (channel << 4) | (1 << 3) ' AIN-channel and AINCOM
   wreg(MUX, mux_value)
-  sync
-  wakeup
+  sync()
+  wakeup()
   repeat 1
-    drdycycle
-  result := rdata
+    drdycycle()
+  result := rdata()
 
 pub wreg(register, value) | h
   h := (%0101_0000 | register) << 8 | 0 ' count -1
@@ -61,20 +61,20 @@ pub wreg(register, value) | h
   waitus(T11)
   pinhigh(cs_pin)
 
-pub drdy : result
+pub drdy() : result
   return pinread(drdy_pin)
 
-pub drdycycle
+pub drdycycle()
   repeat until pinread(drdy_pin) > 0
   repeat until pinread(drdy_pin) == 0
 
-pub sync
+pub sync()
   cmd($FC)
 
-pub wakeup
+pub wakeup()
   cmd($FF)
 
-pub rdata: result
+pub rdata(): result
   ' this assumes we waited for DRDY 0!
   pinlow(cs_pin)
   spi.shiftout(spi.MSBFIRST, $01, 8)
@@ -83,7 +83,7 @@ pub rdata: result
   pinhigh(cs_pin)
   return result
 
-pri reset
+pri reset()
   cmd($FE)
   waitus(100)
 
