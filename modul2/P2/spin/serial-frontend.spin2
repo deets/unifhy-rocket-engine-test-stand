@@ -1,0 +1,94 @@
+con
+  _clkfreq = 160_000_000
+
+  RX1     = 35  { I }                                           ' programming / debug
+  TX1     = 37  { O }
+  BR_TERM  = 115_200                                            ' terminal baud rate
+
+  ADC_CLK = 16
+  ADC_SDO = 17
+  ADC_SDI = 18
+  ADC_DRDY = 19
+  ADC_CS = 20
+  ADC_PDWN = 21
+
+  LF = $a
+  CR = $d
+  DOLLAR = $24
+  ASTERISK = $2a
+
+  INSTRUCTION_BUFFER_SIZE = 8
+  BUFFER_SIZE = 100
+  SERIAL_INPUT_BUFFER_SIZE = 1024
+
+var
+  BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
+  LONG read
+  LONG write
+  LONG buffer[BUFFER_SIZE * 2]
+  BYTE serial_input_buffer[SERIAL_INPUT_BUFFER_SIZE]
+  BYTE serial_input_buffer_pos
+obj
+  term : "jm_fullduplexserial"
+  adc : "buffered_ads1256"
+
+pub main() | c
+  term.start(RX1, TX1, %0000, BR_TERM)
+  read := BUFFER_SIZE
+  adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
+
+  serial_input_buffer_pos := 0
+
+  repeat
+    if term.available() > 0
+      repeat term.available()
+        c := term.rx()
+        serial_input_buffer[serial_input_buffer_pos] := c
+        serial_input_buffer_pos := (serial_input_buffer_pos + 1) +// SERIAL_INPUT_BUFFER_SIZE
+        serial_input_buffer[serial_input_buffer_pos] := 0 ' terminate
+        term.fstr4(string("%c:%2.2x %s %2.2x\r\n"), c, c, serial_input_buffer, serial_input_buffer_pos)
+        if c == LF
+          term.fstr0(string("checking if we got a datagram\r\n"))
+          if rq_datagram()
+            rq_process()
+          reset_buffer()
+
+pri reset_buffer()
+  serial_input_buffer_pos := 0
+
+pri rq_datagram() : result | p, wire_checksum, local_checksum
+  {{
+  A correct datagram looks like this:
+
+  $RQADS<instructions>*CS\r\n
+
+  where CS is a 1-byte checksum built by XOR'ing together
+  all characters between $ and *, and then represented
+  as hexadecimal character.
+
+  None of the bytes in <instructions> is allowed to be \r or \n
+  }}
+  result := false
+  if serial_input_buffer_pos >= 11 ' $RQABS*AB\r\n is 11 characters long
+    p := serial_input_buffer_pos
+    if serial_input_buffer[0] == DOLLAR and serial_input_buffer[p - 1] == LF and serial_input_buffer[p - 2] == CR and serial_input_buffer[p - 5] == ASTERISK
+      wire_checksum := decode_nibble(serial_input_buffer[p - 4]) << 4 | decode_nibble(serial_input_buffer[p - 3])
+      local_checksum := compute_checksum(@serial_input_buffer[1], @serial_input_buffer[p - 6])
+      term.fstr2(string("wire checksum is: %2.2x, local checksum %2.2x\r\n"), wire_checksum, local_checksum)
+      result := wire_checksum == local_checksum
+  return result
+
+pri rq_process()
+  term.fstr0(string("processing datagram\r\n"))
+
+pri decode_nibble(c) : result
+  result := c - $30 ' convert from ascii into 0..9
+  if result > 9 ' we assume A-F
+    result &= %1011111 ' enforce upper case ASCII
+    result -= 7
+
+pri compute_checksum(start, stop) : result | i
+  result := 0
+  repeat i from start to stop
+    result ^= BYTE[i]
+  return result
