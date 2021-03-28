@@ -30,18 +30,18 @@ Ein Aufbau des Testands von Andreas:
 Pin out of the breakout board as seen from top with control interface
 to the left:
 
-|-----+----------|
-| Pin | Function |
-|-----+----------|
-|   1 | PDWN     |
-|   2 | CS_      |
-|   3 | DRDY     |
-|   4 | DOUT     |
-|   5 | DIN      |
-|   6 | SCLK     |
-|   7 | GND      |
-|   8 | 5V       |
-|-----+----------|
+|-----+----------+---------|
+| Pin | Function | P2 Eval |
+|-----+----------+---------|
+|   1 | PDWN     |      21 |
+|   2 | CS_      |      20 |
+|   3 | DRDY     |      19 |
+|   4 | DOUT     |      17 |
+|   5 | DIN      |      18 |
+|   6 | SCLK     |      16 |
+|   7 | GND      |     GND |
+|   8 | 5V       |     EXT |
+|-----+----------+---------|
 
 #+attr_html: :width 400 px
 [[file:doc/ads1256-breakout.jpg]]
