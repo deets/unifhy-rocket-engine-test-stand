@@ -24,21 +24,26 @@ con
 
   INSTRUCTION_BUFFER_SIZE = 8
   BUFFER_SIZE = 100
-  SERIAL_INPUT_BUFFER_SIZE = 1024
+  SERIAL_BUFFER_SIZE = 1024
 
 var
   BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
   LONG read
   LONG write
   LONG buffer[BUFFER_SIZE * 2]
-  BYTE serial_input_buffer[SERIAL_INPUT_BUFFER_SIZE]
+  BYTE serial_input_buffer[6]  ' We always start with $RQADS
+  BYTE payload[SERIAL_BUFFER_SIZE - 6]
   BYTE serial_input_buffer_pos
+  BYTE serial_output_preamble[6] ' Again $RQADS
+  BYTE serial_output_buffer[SERIAL_BUFFER_SIZE]
 obj
   debug_term : "jm_fullduplexserial"
   adc : "buffered_ads1256"
   serial : "jm_fullduplexserial"
 
-pub main() | c
+pub main() | c, correct
+  bytemove(@serial_output_preamble, string("$RQADS"), 6)
+
   debug_term.start(RX1, TX1, %0000, BR_DEBUG_TERM)
   serial.start(RX0, TX0, %0000, BR_SERIAL)
   read := BUFFER_SIZE
@@ -51,13 +56,13 @@ pub main() | c
       repeat serial.available()
         c := serial.rx()
         serial_input_buffer[serial_input_buffer_pos] := c
-        serial_input_buffer_pos := (serial_input_buffer_pos + 1) +// SERIAL_INPUT_BUFFER_SIZE
+        serial_input_buffer_pos := (serial_input_buffer_pos + 1) +// SERIAL_BUFFER_SIZE
         serial_input_buffer[serial_input_buffer_pos] := 0 ' terminate
         debug_term.fstr4(string("%c:%2.2x %s %2.2x\r\n"), c, c, serial_input_buffer, serial_input_buffer_pos)
         if c == LF
           debug_term.fstr0(string("checking if we got a datagram\r\n"))
           if rq_datagram()
-            rq_process()
+            correct := rq_process()
           reset_buffer()
 
 pri reset_buffer()
@@ -76,7 +81,7 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
   None of the bytes in <instructions> is allowed to be \r or \n
   }}
   result := false
-  if serial_input_buffer_pos >= 11 ' $RQABS*AB\r\n is 11 characters long
+  if serial_input_buffer_pos >= 11 ' $RQADS*AB\r\n is 11 characters long
     p := serial_input_buffer_pos
     if serial_input_buffer[0] == DOLLAR and serial_input_buffer[p - 1] == LF and serial_input_buffer[p - 2] == CR and serial_input_buffer[p - 5] == ASTERISK
       wire_checksum := decode_nibble(serial_input_buffer[p - 4]) << 4 | decode_nibble(serial_input_buffer[p - 3])
@@ -85,16 +90,50 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
       result := wire_checksum == local_checksum
   return result
 
-pri rq_process()
+pri rq_process() : result | payload_length
+  payload_length := serial_input_buffer_pos - 6 - 5 ' remove $RQADS and *XX\r\n
   debug_term.str(string("processing datagram: "))
-  debug_term.substr(@serial_input_buffer[6], serial_input_buffer_pos - 6 - 5)
+  debug_term.substr(@payload, payload_length)
   debug_term.fstr0(string("\r\n"))
+  case payload[0]
+    "P" : result := rq_ping(payload_length)
+
+
+pri rq_ping(payload_length) : result
+  if payload_length <> 1
+    return FALSE
+  debug_term.fstr0(string("Got PING, send PONG\r\n"))
+  rq_send_str(string("P"))
+  return TRUE
+
+pri rq_send_str(str_addr) | l
+  l := strsize(str_addr)
+  bytemove(@serial_output_buffer, str_addr, l)
+  rq_finalize(l)
+  debug_term.substr(@serial_output_preamble, 6 + 5 + l)
+  serial.substr(@serial_output_preamble, 6 + 5 + l)
+
+pri rq_finalize(length) | checksum, i
+  checksum := 0
+  repeat i from 1 to length + 5 ' the RQADS is included in the checksum!
+    checksum ^= serial_output_preamble[i]
+  debug_term.fstr1(string("checksum: %2.2x\r\n"), checksum)
+  serial_output_buffer[length] := ASTERISK
+  serial_output_buffer[length + 1] := encode_nibble(checksum >> 4)
+  serial_output_buffer[length + 2] := encode_nibble(checksum & $f)
+  serial_output_buffer[length + 3] := 13 ' \r
+  serial_output_buffer[length + 4] := 10 ' \n
 
 pri decode_nibble(c) : result
   result := c - $30 ' convert from ascii into 0..9
   if result > 9 ' we assume A-F
     result &= %1011111 ' enforce upper case ASCII
     result -= 7
+
+pri encode_nibble(c) : result
+  result := c + $30 ' convert to ascii 0..9
+  if c > 9 ' we are in A-F territory
+    result += 7
 
 pri compute_checksum(start, stop) : result | i
   result := 0

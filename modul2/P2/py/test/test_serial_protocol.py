@@ -15,6 +15,7 @@ def rqads(message):
     chksum = reduce(operator.xor, total, 0)
     suffix = f"*{chksum:02x}\r\n".encode("ascii")
     datagram = b"$" + total + suffix
+    print(datagram)
     return datagram
 
 
@@ -25,4 +26,5 @@ def conn():
 
 
 def test_ping(conn):
-    conn.write(rqads("PING"))
+    conn.write(rqads("P"))
+    print(conn.readline())
