@@ -1,9 +1,14 @@
 con
   _clkfreq = 160_000_000
 
+  ' The USB serial
+  RX0     = 63
+  TX0     = 62
+  BR_SERIAL = 115200
+
   RX1     = 35  { I }                                           ' programming / debug
   TX1     = 37  { O }
-  BR_TERM  = 115_200                                            ' terminal baud rate
+  BR_DEBUG_TERM  = 115_200                                            ' debuginal baud rate
 
   ADC_CLK = 16
   ADC_SDO = 17
@@ -29,26 +34,28 @@ var
   BYTE serial_input_buffer[SERIAL_INPUT_BUFFER_SIZE]
   BYTE serial_input_buffer_pos
 obj
-  term : "jm_fullduplexserial"
+  debug_term : "jm_fullduplexserial"
   adc : "buffered_ads1256"
+  serial : "jm_fullduplexserial"
 
 pub main() | c
-  term.start(RX1, TX1, %0000, BR_TERM)
+  debug_term.start(RX1, TX1, %0000, BR_DEBUG_TERM)
+  serial.start(RX0, TX0, %0000, BR_SERIAL)
   read := BUFFER_SIZE
   adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
 
   serial_input_buffer_pos := 0
 
   repeat
-    if term.available() > 0
-      repeat term.available()
-        c := term.rx()
+    if serial.available() > 0
+      repeat serial.available()
+        c := serial.rx()
         serial_input_buffer[serial_input_buffer_pos] := c
         serial_input_buffer_pos := (serial_input_buffer_pos + 1) +// SERIAL_INPUT_BUFFER_SIZE
         serial_input_buffer[serial_input_buffer_pos] := 0 ' terminate
-        term.fstr4(string("%c:%2.2x %s %2.2x\r\n"), c, c, serial_input_buffer, serial_input_buffer_pos)
+        debug_term.fstr4(string("%c:%2.2x %s %2.2x\r\n"), c, c, serial_input_buffer, serial_input_buffer_pos)
         if c == LF
-          term.fstr0(string("checking if we got a datagram\r\n"))
+          debug_term.fstr0(string("checking if we got a datagram\r\n"))
           if rq_datagram()
             rq_process()
           reset_buffer()
@@ -74,12 +81,14 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
     if serial_input_buffer[0] == DOLLAR and serial_input_buffer[p - 1] == LF and serial_input_buffer[p - 2] == CR and serial_input_buffer[p - 5] == ASTERISK
       wire_checksum := decode_nibble(serial_input_buffer[p - 4]) << 4 | decode_nibble(serial_input_buffer[p - 3])
       local_checksum := compute_checksum(@serial_input_buffer[1], @serial_input_buffer[p - 6])
-      term.fstr2(string("wire checksum is: %2.2x, local checksum %2.2x\r\n"), wire_checksum, local_checksum)
+      debug_term.fstr2(string("wire checksum is: %2.2x, local checksum %2.2x\r\n"), wire_checksum, local_checksum)
       result := wire_checksum == local_checksum
   return result
 
 pri rq_process()
-  term.fstr0(string("processing datagram\r\n"))
+  debug_term.str(string("processing datagram: "))
+  debug_term.substr(@serial_input_buffer[6], serial_input_buffer_pos - 6 - 5)
+  debug_term.fstr0(string("\r\n"))
 
 pri decode_nibble(c) : result
   result := c - $30 ' convert from ascii into 0..9
