@@ -1,0 +1,835 @@
+CON 'See end of file for license
+{{   SDSPI driver for P2-ES  ASM RC4 - SMARTPINS!
+        SDSPI ASM for P2 v_0_1_0
+    by Cheezus Slice - Joe Heinz - 2019
+    Cheezus Slice (Joe Heinz)  -   July - 2019
+        cheezusslicedj@gmail.com
+    Thanks to all those out there in forum land!
+    Original spin version by Radical Eye Software Copyright 2008
+}}
+    'sectorsize =   512
+    spi_clk_max =   25_000_00   ' 20mhz safe
+    spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
+
+'RJA added multiblock reads and removed smartpin mode to boost speed
+'RJA also allows specifying cog # in con section below
+
+CON
+    'SPI_COG=6 'cog to use
+
+ALAW_BASESHL = 3
+
+VAR  byte cog
+
+PUB Stop()
+    if cog
+        cogstop(cog-1)
+    cog := 0
+
+PUB start_explicit( _DO, _CLK, _DI, _CS ) : card_type | domask, dimask
+    stop()
+    cmd := "i"   'set flag to know if the started cog has read its parameters
+    arg1 :=  _DO | (_CLK << 8) + (_DI << 16) + ( _CS << 24)' pins
+    arg2 := getmask(_CLK, _DO) + (getmask(_CLK, _DI) << 4) ' clock masks
+    arg2 += spi_clk_inv << 8                               ' clock invert
+    arg3 := GetBitTime(spi_clk_max)                        ' spi bit time
+    err := clkfreq
+    cog := coginit(COGEXEC_NEW,@_asm_start,@cmd) + 1 'RJA
+    if cog
+        repeat until cmd <> "i"     ' wait until cog is done reading parameter
+        card_type := err            ' arg5 returns card type or returns with error from low level driver
+
+PUB mountCard():r
+   return DoCommand("c", 0, 0, 0)
+
+PUB ReadBlock(n, b):r 'n is block#, b is pointer to write to
+    return DoCommand("r", n, b, 0)
+
+PUB WriteBlock(n, b):r 'n is block#, b is pointer to read from
+    return DoCommand("w", n, b, 0)
+
+PUB release():r
+    return DoCommand("z",0,0,0)
+
+PUB GetCog():r
+    return cog
+
+PUB getMailbox():r
+    return @cmd
+
+
+pub readblocks(n,b,p):r  'use multi-block read n=#blocks to read, b=block#, p=pointer to write to'Note:  Currently have to re-mount after using this...
+    return DoCommand("F", n, b, p)   'note:  usage of "n" and "b" is not the same as above...
+
+PUB ConfigureDAC(left,right,rate,bus_hog) : using_pwm | period,mode
+
+period := clkfreq/rate
+if period & 255
+  mode := P_DAC_75R_2V|P_OE|P_DAC_DITHER_RND
+  using_pwm := false
+else
+  mode := P_DAC_75R_2V|P_OE|P_DAC_DITHER_PWM
+  using_pwm := true
+
+DoCommandAsync("D",(left&$FF)+(right&$FF)<<8+(bus_hog?negx:0),mode,period)
+
+PUB setMusic(startblk,endblk,restartblk)
+  DoCommandAsync("M",startblk,endblk,restartblk)
+PUB stopMusic()
+  setMusic(0,0,0)
+
+PUB setSFX(startblk,endblk,restartblk)
+  DoCommandAsync("S",startblk,endblk,restartblk)
+PUB stopSFX()
+  setSFX(0,0,0)
+
+PUB getSubcodePtr() :result
+ return @subcode
+
+PRI GetBitTime(max_clkfreq) : bt
+    bt :=((clkfreq / max_clkfreq) /2 )+1   ' SPI bit time
+    if bt < 2                              ' make sure at least sysclock /2
+        bt := 2
+
+PRI DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
+    repeat while cmd <> 0
+    debug("Pushing command ",udec(_cmd),uhex_long(_arg1, _arg2, _arg3))
+    arg1 := _arg1
+    arg2 := _arg2
+    arg3 := _arg3
+    cmd  := _cmd
+
+PRI DoCommand(_cmd, _arg1, _arg2, _arg3):r
+    DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
+    repeat until cmd == 0
+    return err
+
+PRI getmask(clk, data) : t
+    t := (clk - data) & %0111
+
+DAT
+                org
+_asm_start      mov     ptr_to_mbox,    ptra                ' save mbox address for later
+                mov     music_buffer1,  ptr_to_mbox
+                add     music_buffer1,  #@musicHubBuffer1-@cmd
+                mov     music_buffer2,  ptr_to_mbox
+                add     music_buffer2,  ##@musicHubBuffer2-@cmd
+                mov     sfx_buffer1,    ptr_to_mbox
+                add     sfx_buffer1,    ##@sfxHubBuffer1-@cmd
+                mov     sfx_buffer2,    ptr_to_mbox
+                add     sfx_buffer2,    ##@sfxHubBuffer2-@cmd
+                'drvnot #25 'debug
+
+get_cmd
+                '' Check audio first
+                tjnz sfxrequest,#service_sfx
+                tjnz musicrequest,#service_music
+                '' get parameters from spin
+                rdlong cmd_in, ptra wz '
+                '' timeout and release card after 10s
+        if_z    jmp     #get_cmd                            ' no cmd so handle time
+                rdlong  arg1_in,        ++ptra
+                rdlong  arg2_in,        ++ptra
+                rdlong  arg3_in,        ++ptra
+                rdlong  err_out,        ++ptra              ' dummy read to align err pointer
+                '' decode command
+                debug("got command ",udec(cmd_in),uhex_long(arg1_in,arg2_in,arg3_in))
+                cmp     cmd_in,         #"r"    wz
+        if_z    jmp     #read_a
+                cmp     cmd_in,         #"w"    wz
+        if_z    jmp     #write_b
+                cmp     cmd_in,         #"F"    wz
+        if_z    jmp     #read_multi
+                cmp     cmd_in,         #"S"    wz
+        if_z    jmp     #sfx_cmd
+                cmp     cmd_in,         #"M"    wz
+        if_z    jmp     #music_cmd
+                cmp     cmd_in,         #"i"    wz
+        if_z    jmp     #do_init
+                cmp     cmd_in,         #"c"    wz
+        if_z    call    #card_init
+                cmp     cmd_in,         #"D"    wz
+        if_z    jmp     #dac_config
+                cmp     cmd_in,         #"z"    wz
+        if_z    jmp     #card_release
+                mov     err_out,        #5                  ' err = no command                 '
+
+
+
+
+DAT 'end_cmd               '' do commands
+end_cmd
+                testn   bus_hog_flag,#0 wz
+                drvz    pinCS               ' set cs high if not in bus hog mode
+                test    rq_done,#511    wz
+        if_nz   altd    rq_done
+        if_nz   mov     0-0,#0
+        if_nz   mov     rq_done,#0
+        if_z    wrlong  err_out,        ptra
+                mov     cmd_in,         #0                  ' signal done to spin driver
+                mov     ptra,           ptr_to_mbox         ' return ptra back to mbox
+        if_z    wrlong  cmd_in,         ptr_to_mbox
+                debug("cmd done")
+                jmp     #get_cmd
+
+dat 'do_init     'RJA disabled smartpins
+do_init
+
+                getbyte pinDO,          arg1_in,    #0
+                getbyte pinCLK,         arg1_in,    #1
+                getbyte pinDI,          arg1_in,    #2
+                getbyte pinCS,          arg1_in,    #3
+
+                mov delay1s,err_out ' clkfreq!
+                debug(udec(delay1s))
+
+                jmp     #end_cmd
+
+
+DAT 'read_multi 'read multiple blocks (AKA sectors)
+read_multi          '' arg1 is #blocks to read, arg2 is block#, arg3 is hub pointer
+                mov     cmdout,         #18                 ' command = block read
+                shl     arg2_in,        blocksh             ' non-hc compatibility
+                mov     cmdpar,         arg2_in             ' sd block address
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+
+                wrfast  #0,arg3_in
+LoopMulti
+                'read_resp
+                'waitx   ##200
+                call    #read_d
+                cmp     x,#$FF wcz
+        if_e    jmp     #LoopMulti
+
+                mov     spare, con512'##sectorsize
+.loop
+                rep     @.end_read, #8
+                drvl    pinCLK
+                rcl     x,#1  ' shift in msb first (first dummy zero)
+                waitx   #2
+                drvh    pinCLK
+                nop
+                testp   pinDO  wc
+.end_read
+                rcl     x,#1
+                wfbyte  x
+        djnz    spare,#.loop
+
+                call    #read_d
+                call    #read_d
+
+                djnz    arg1_in,#LoopMulti
+
+                'Do commmand 12
+                drvh    pinCS
+                waitx   #100
+                mov     cmdout,         #12                 ' command = block read
+                shr     arg2_in,        blocksh             ' non-hc compatibility
+                mov     cmdpar,         #0
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+
+
+                jmp     #end_cmd
+
+DAT 'read_f 'read byte direct
+read_d
+                mov     x,          #0
+                rep     @.end_read, #8
+                drvl    pinCLK
+                waitx   #14    '' !! 13 safe for up to 160 mhz, 14 for 320mhz
+                testp   pinDO  wc
+                drvh    pinCLK
+                waitx   #14
+                rcl     x, #1
+.end_read
+                ret
+
+DAT 'read_a 'read a block (sector)
+read_a          '' arg1 is sd ptr, arg2 is hub
+                debug("In read func!")
+                mov     cmdout,         #17                 ' command = block read
+                shl     arg1_in,        blocksh             ' non-hc compatibility
+                mov     cmdpar,         arg1_in             ' sd block address
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+                call    #read_resp
+                wrfast  #0,             arg2_in
+
+'RJA making this faster...
+
+                mov     spare, con512'##sectorsize
+.loop
+                rep     @.end_read, #8
+                drvl    pinCLK
+                rcl     x,#1  ' shift in msb first (first dummy zero)
+                waitx   #5
+                drvh    pinCLK
+                nop
+                testp   pinDO  wc
+.end_read
+                rcl     x,#1
+                wfbyte  x
+        djnz    spare,#.loop
+
+                call    #read_d
+                call    #read_d
+                ' FIFO should have emptied itself now
+                jmp     #end_cmd
+
+
+
+dat ' write_b        'write a sector
+write_b         '' arg1 is sd ptr, arg2 is hub
+                debug("In write func!")
+                mov     cmdout,         #24                 ' command = block write
+                shl     arg1_in,        blocksh             ' non-hc compatibility
+                mov     cmdpar,         arg1_in             ' sd block address
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+                mov     dataout,        #$fe
+                call    #send_byte
+                rdfast  #0,             arg2_in
+
+                mov     spare,          con512'##sectorsize
+.loop           rfbyte  dataout
+                call    #send_byte
+                djnz    spare,          #.loop
+                call    #read_byte
+                call    #read_byte
+                call    #read_resp
+                and     reply,          #$1f
+                cmp     reply,          #5              wz
+    if_nz       mov     err_out,        ##-42               ' err = bwrite timeout
+                call    #sd_busy
+                jmp     #end_cmd
+
+DAT 'audio_irq
+audio_irq
+              ' write sample to DAC
+
+                cmps pinRight,#0 wcz
+        if_b    adds left_next,right_next
+        if_b    sar left_next,#1
+                add left_next,logical_center
+                add right_next,logical_center
+                sca left_next,dac_scale
+                mov left_next,0-0
+                sca right_next,dac_scale
+                mov right_next,0-0
+                wypin left_next,pinLeft
+        if_ae   wypin right_next,pinRight
+
+                ' prepare next sample
+
+do_music        tjz music_left,#music_chkrq ' don't update music if data is behind
+
+                ' load, seperate and sign-extend samples
+                rdlong rightmusic,music_ptr
+                getword leftmusic,rightmusic,#1
+                signx leftmusic,#15
+                signx rightmusic,#15
+                sar leftmusic,#1
+                sar rightmusic,#1
+
+                add music_ptr,#4
+                djnz music_left,#music_done
+music_chkrq
+                tjnz musicrequest,#music_done ' still busy (bad!)
+
+
+                mov atmp2,ptr_to_mbox
+                add atmp2,#(@subcode - @cmd) ' pointer to subcode box
+
+              ' figure out which buffers to play/fill
+                mov atmp1,musicrq_dst wz ' set Z if there was no previous request
+        if_nz   mov music_left,#512/4 ' samples ber buffer
+        if_nz   rdlong atmp3,atmp1
+        if_nz   wrlong atmp3,atmp2 ' Subcode write HERE
+                mov music_ptr,atmp1
+                cmp atmp1,music_buffer1 wz
+        if_ne   mov musicrq_dst,music_buffer1
+        if_e    mov musicrq_dst,music_buffer2
+
+              ' request next block
+                testn musicblock,#0 wz
+        if_nz   add musicblock,#1
+                cmp musicblock,musicend wcz
+        if_ae   mov musicblock,musicrestart wz
+                mov musicrequest,musicblock wz
+        if_z    mov musicrq_dst,#0 ' music has ended, don't play garbo next time
+        if_z    mov leftmusic,#0
+        if_z    mov rightmusic,#0
+
+music_done
+
+do_sfx          tjz sfx_left,#sfx_chkrq ' don't update SFX if data is behind
+
+                '' load byte
+                rdbyte atmp1,sfx_ptr
+                add sfx_ptr,#1
+
+                '' Decompress A-law
+                xor atmp1,#$55
+                mov sfxsample,atmp1
+                getnib sfxsample,atmp1,#0 ' mantissa isolated
+                shl sfxsample,#ALAW_BASESHL
+                add sfxsample,alaw_bias
+                getnib atmp2,atmp1,#1
+                and atmp2,#7 wz ' exponent isolated
+        if_nz   add sfxsample,alaw_leading
+        if_nz   sub atmp2,#1
+                shl sfxsample,atmp2
+                test atmp1,#$80 wc
+                negnc sfxsample,sfxsample
+
+                djnz sfx_left,#sfx_done
+
+sfx_chkrq
+                tjnz sfxrequest,#sfx_done ' still busy (bad!)
+
+              ' figure out which buffers to play/fill
+                mov atmp1,sfxrq_dst  wz ' set Z if there was no previous request
+        if_nz   mov sfx_left,con512 ' samples per buffer
+                mov sfx_ptr,atmp1
+                cmp atmp1,sfx_buffer1 wz
+        if_ne   mov sfxrq_dst,sfx_buffer1
+        if_e    mov sfxrq_dst,sfx_buffer2
+
+              ' request next block
+                testn sfxblock,#0 wz
+        if_nz   add sfxblock,#1
+                cmp sfxblock,sfxend wcz
+        if_ae   mov sfxblock,sfxrestart
+                mov sfxrequest,sfxblock wz
+        if_z    mov sfxrq_dst,#0 ' sfx has ended, don't play garbo next time
+        if_z    mov sfxsample,#0
+
+sfx_done
+
+do_mixing
+               mov left_next,sfxsample
+               mov right_next,sfxsample
+               adds left_next,leftmusic
+               adds right_next,rightmusic
+
+               reti3
+
+DAT 'service_music
+service_music
+                mov arg1_in,musicrequest
+                mov arg2_in,musicrq_dst
+                mov rq_done,#musicrequest
+                jmp #read_a
+DAT 'service_sfx
+service_sfx
+                mov arg1_in,sfxrequest
+                mov arg2_in,sfxrq_dst
+                mov rq_done,#sfxrequest
+                jmp #read_a
+
+DAT 'music_cmd
+music_cmd
+                mov musicblock,arg1_in
+                mov musicend,arg2_in
+                mov musicrestart,arg3_in
+                jmp     #end_cmd
+
+DAT 'sfx_cmd
+sfx_cmd
+                mov sfxblock,arg1_in
+                mov sfxend,arg2_in
+                mov sfxrestart,arg3_in
+                jmp     #end_cmd
+
+DAT 'dac_config
+dac_config
+                rep @.noirq,#1
+                getbyte pinLeft,arg1_in,#0
+                getbyte pinRight,arg1_in,#1
+                signx pinRight,#7
+                cmps pinRight,#0 wcz
+                fltl pinLeft
+        if_ae   fltl pinRight
+                wrpin arg2_in,pinLeft
+        if_ae   wrpin arg2_in,pinRight
+                wxpin arg3_in,pinLeft
+        if_ae   wxpin arg3_in,pinRight
+                wypin dac_center,pinLeft
+        if_ae   wypin dac_center,pinRight
+                mov ijmp3,#audio_irq
+                mov tmp1,pinLeft
+                add tmp1,#%001_000000
+                setse3 tmp1
+                setint3 #EVENT_SE3
+                drvh pinLeft
+        if_ae   drvh pinRight
+
+                mov left_next,#0
+                mov right_next,#0
+
+                testb arg1_in,#31 wc
+                wrc bus_hog_flag
+.noirq
+                jmp     #end_cmd
+
+dat ' card_init
+card_init
+
+                drvh    pinCS
+                drvh    pinCLK
+                drvh    pinDI
+
+
+                mov     x,##600
+.loop1
+                call    #read_byte
+                waitx   #100
+                djnz    x,#.loop1
+
+                mov     x,#3
+.loop2
+                mov     cmdout,         #0
+                mov     cmdpar,         #0
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+                drvh    pinCS
+                waitx   #100
+                djnz    x,#.loop2
+
+
+                mov     cmdout,         #8                  ' cmd 8, $1aa
+                mov     cmdpar,         #$1AA
+                call    #do_sdcmd
+                call    #read_byte                          ' read 32 bit
+                mov     err_out,reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+
+                drvh    pinCS
+
+
+
+.cmd55          mov     err_out,        ##-40               ' err = card won't init
+
+
+                mov     cmdout,         #55                 ' cmd 55,0
+                mov     cmdpar,         #0
+                call    #do_sdcmd
+                mov     cmdout,         #41                 ' cmd 41, $4000_0000
+                mov     cmdpar,         ##$4000_0000        '
+                call    #do_sdcmd
+                drvh    pinCS                               ' set cs high
+                cmp     reply,          #$01        wz      ' 01 = idle
+
+        if_z    jmp     #.cmd55
+
+
+
+                mov     cmdout,         #58                 ' cmd 58, 0
+                mov     cmdpar,         #0
+                call    #do_sdcmd
+                call    #read_byte
+                testb   reply,          #6          wz
+        if_nz   mov     blocksh,        #9                  ' sd support
+        if_nz   mov     err_out,        #1                  ' sd support, return card type 1
+
+
+'        if_nz   jmp     #end_cmd                            ' don't support SD, SDHC only
+        if_z    mov     blocksh,        #0                  ' sdhc
+        if_z    mov     err_out,        #2                  ' return card type 2
+
+
+
+                call    #read_byte
+                call    #read_byte
+                call    #read_byte
+                drvh    pinCS    ' set cs high
+
+
+                mov     cmdout,         #16                 ' cmd 16, $200
+                mov     cmdpar,         ##$200
+                call    #do_sdcmd
+                drvh    pinCS    ' set cs high
+
+
+                jmp #end_cmd
+
+dat 'card_release
+card_release
+              fltl pinCS
+              call #read_byte
+              call #read_byte
+              fltl pinCS
+              fltl pinCLK
+              fltl pinDI
+
+              jmp #end_cmd
+
+dat 'do_sdcmd
+do_sdcmd   '' OP is cmdout, parm = cmdpar
+                drvl    pinCS
+                call    #read_byte
+                mov     dataout,        cmdout
+                add     dataout,        #$40
+                call    #send_byte
+                getbyte dataout,        cmdpar,     #3
+                call    #send_byte
+                getbyte dataout,        cmdpar,     #2
+                call    #send_byte
+                getbyte dataout,        cmdpar,     #1
+                call    #send_byte
+                getbyte dataout,        cmdpar,     #0
+                call    #send_byte
+                cmp     cmdout,         #0              wz
+    if_z        mov     dataout,        #$95
+    if_nz       mov     dataout,        #$87
+                call    #send_byte
+                call    #read_resp
+do_sdcmd_ret    ret
+
+dat 'send_byte
+send_byte
+                rol     dataout,       #24
+                rep     @.end_send, #8
+                rcl     dataout,       #1      wc
+                drvl    pinCLK
+                drvc    pinDI
+                waitx   #12 'rja moved this down one
+                drvh    pinCLK
+                waitx   #12
+.end_send
+        _ret_   drvh    pinDI
+
+dat 'read_byte
+read_byte
+                mov     reply,#0
+                rep     @.end_read, #8
+                drvl    pinCLK
+                waitx   #14     '' !! 13 safe for up to 160 mhz, 14 for 320mhz
+                testp   pinDO  wc
+                drvh    pinCLK
+                waitx   #14
+                rcl     reply, #1
+.end_read
+                RET
+
+
+dat 'sd_busy
+sd_busy         call    #read_byte
+                cmp     reply,          #0          wz
+   if_z         call    #check_time
+   if_z         jmp     #sd_busy
+sd_busy_ret     ret
+
+DAT 'read_resp
+read_resp       call    #read_byte
+                cmp     reply,          #$ff        wz
+   'if_z         call    #check_time
+   if_z         jmp     #read_resp
+                debug("got response!")
+read_resp_ret   ret
+
+dat 'sd_busy
+check_time      pollct1                             wc
+   if_nc        ret
+                mov     err_out,        ##-41               ' err = timeout
+                pop     spare ' pop a stack level
+                jmp     #end_cmd
+
+
+dat 'wait_clock
+wait_clock      testp   pinCLK                      wc
+        if_nc   jmp     #wait_clock
+wait_clock_ret  ret
+
+DAT 'reserved and assigned data
+x           long    0 'for RJA
+
+con512 long 512
+
+dac_center    long $7F80
+dac_scale     long $FF00
+logical_center    long $8000
+
+alaw_bias     long $01<<(ALAW_BASESHL-1)
+alaw_leading  long $10<<ALAW_BASESHL
+
+bus_hog_flag long 0
+
+rq_done long 0 ' cog location to clear
+
+' how many samples left
+music_left long 0
+sfx_left   long 0
+
+' requests to SD code
+musicrequest long 0
+sfxrequest   long 0
+musicrq_dst  long 0
+sfxrq_dst    long 0
+
+' audio streaming parameters
+musicblock    long 0 ' in sectors
+musicend      long 0
+musicrestart  long 0
+sfxblock      long 0 ' in sectors
+sfxend        long 0
+sfxrestart    long 0
+
+
+left_next   res 1
+right_next  res 1
+leftmusic   res 1
+rightmusic  res 1
+sfxsample   res 1
+music_ptr   res 1
+sfx_ptr     res 1
+
+atmp1       res 1
+atmp2       res 1
+atmp3       res 1
+
+' Pointers to buffers
+music_buffer1           res 1
+music_buffer2           res 1
+sfx_buffer1             res 1
+sfx_buffer2             res 1
+
+
+' loaded on init   ''15 longs CHZ code
+{=== Pin Variables ===}
+pinDO       res 1       ' do
+pinCLK      res 1       ' clk
+pinDI       res 1       ' di
+pinCS       res 1       ' chip select
+pinLeft     res 1       ' audio left
+pinRight    res 1       ' audio right
+{===== Smartpin Clock Variables =====}'' smartpins stuffs
+sp_doclk    res 1       ' smartpin mask for clock to do
+sp_diclk    res 1       ' smartpin mask for clock to di
+sp_bt       res 1       ' bit time
+sp_init_bt  res 1       ' bit time @400k
+sp_inv_pin  res 1       ' invert clock pin
+{===== Command Mailbox =====}
+ptr_to_mbox res 1       ' pointer to spin mailbo
+cmd_in      res 1       ' mailbox in
+arg1_in     res 1
+arg2_in     res 1
+arg3_in     res 1
+err_out     res 1
+{=== Timing Variables ===}
+delay1s     res 1
+
+tmp1          res 1
+
+'FIT $1C0
+                   ''============[ COG VARIABLES - SD BOOT ROM A]========================================
+    'org    $1C0              ' place the variables in cog $1C0-$1DF
+
+cmdout          res     1                       ' The 8b CMDxx | $40
+cmdpar          res     1                       ' The 32b parameters
+cmdcrc          res     1                       ' The 8b CRC (must be valid for CMD0 & CMD8)
+cmdpar2         res     1                       ' SDV1=$0, SDV2=$40000000
+cmdtype         res     1                       ' reply is R1=1, R3=3, R7=7, else 0
+reply           res     1                       ' R1 reply (moved to replyR1 when R3/R7 32b reply here)
+replyR1         res     1                       ' R1 reply (8b saved when R3/R7 32b reply follows)
+dataout         res     1                       ' 8/32 bit data being shifted out
+bytescnt        res     1                       ' #bytes to send/recv
+bitscnt         res     1                       ' #bits to be shifted in/out
+ctr1            res     1
+timeout         res     1                       ' = starttime + delay
+spare           res     1
+skiprun         res     1                       ' 1= skip load/run mbr/vol & load/no-run fname
+                                                                   '\ 1=SDV1, 2=SDV2(byte address), 3=SDHC/SDV2(block address)
+blocksh         res     1                       '/ block shift 0/9 bits
+clustersh       res     1                       ' sectors/cluster SHL 'n' bits
+
+vol_begin       res     1 '$0000_2000           ' Ptn0: first sector of PTN
+fsi_begin       res     1 '$0000_2001           ' Ptn0:       sector of file system info
+fat_begin       res     1 '$0000_3122           ' Ptn0: first sector of FAT table
+dir_begin       res     1' $0000_4000           ' Ptn0: first sector of DATA is DIR table
+dat_begin       res     1 '$0000_4580 $0000_54C0' Ptn0: first sector of file's DATA
+ptn_size        res     1 '$0008_0000           '       file-size 32KB = 64<<9 sectors
+
+_bufad          res     1
+_blocknr        res     1
+_sectors        res     1
+_entries        res     1
+bufad           res     1                       ' ptr sector buffer
+blocknr         res     1                       ' sector#
+fname           res     3                       ' 8+3+1
+_hubdata        res     1
+
+FIT 496
+
+
+dat         '' singleton spin mailbox
+orgh
+alignl
+cmd     long 0
+arg1    long 0
+arg2    long 0
+arg3    long 0
+err     long 0
+
+subcode long 0
+
+musicHubBuffer1 byte 0[512]
+musicHubBuffer2 byte 0[512]
+sfxHubBuffer1 byte 0[512]
+sfxHubBuffer2 byte 0[512]
+
+{
+var    '' multi spin mailbox
+long  cmd, arg1, arg2, arg3, arg4, err
+}
+
+con smartpin_constants
+    '%AAAA_BBBB_FFF_PPPPPPPPPPPPP_TT_MMMMM_0
+                 ''PPPP_PPP_PPP_PPP
+    'ppp        =''xxxx_CIO_HHH_LLL
+    'sp_inv_pin  = %0000_001_000_000 << 8
+  'smartpin modes                    TT_MMMMM_0
+    sp_stx      =   %01_11100_0     ' +2
+    sp_srx      =   %00_11101_0     ' +3
+    sp_srx_c    =   %1_00111
+    sp_stx_c    =   %1_00111
+    sp_clk      =   %01_00101_0 '+ sp_inv_pin ' inv clock right way
+    byteclks    =   (2*8)
+
+
+CON 'MIT License Terms
+{{
+'  Permission is hereby granted, free of charge, to any person obtaining
+'  a copy of this software and associated documentation files
+'  (the "Software"), to deal in the Software without restriction,
+'  including without limitation the rights to use, copy, modify, merge,
+'  publish, distribute, sublicense, and/or sell copies of the Software,
+'  and to permit persons to whom the Software is furnished to do so,
+'  subject to the following conditions:
+'
+'  The above copyright notice and this permission notice shall be included
+'  in all copies or substantial portions of the Software.
+'
+'  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+'  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+'  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+'  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+'  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+'  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+'  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+}}

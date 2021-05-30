@@ -6,9 +6,7 @@ con
   TX0     = 62
   BR_SERIAL = 115200
 
-  RX1     = 35  { I }                                           ' programming / debug
-  TX1     = 37  { O }
-  BR_DEBUG_TERM  = 115_200                                            ' debuginal baud rate
+  DEBUG_BAUD  = 230_400
 
   ADC_CLK = 16
   ADC_SDO = 17
@@ -26,6 +24,11 @@ con
   BUFFER_SIZE = 100
   SERIAL_BUFFER_SIZE = 1024
 
+  SD_DO = 58
+  SD_DI = 59
+  SD_CS = 60
+  SD_CLK = 61
+
 var
   BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
   LONG read
@@ -37,14 +40,29 @@ var
   BYTE serial_output_preamble[6] ' Again $RQADS
   BYTE serial_output_buffer[SERIAL_BUFFER_SIZE]
 obj
-  debug_term : "jm_fullduplexserial"
   adc : "buffered_ads1256"
   serial : "jm_fullduplexserial"
+  fat: "FAT32"
 
-pub main() | c, correct
+pub main() | c, correct, success
+  success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
+  debug(zstr(string("fatenginestart:")))
+  debug(udec(success))
+
+  success := fat.mountPartition(0)
+  debug(zstr(string("mount:")))
+  debug(udec(success))
+
+  success := fat.listEntries("N")
+  debug(zstr(string("listEntries:")))
+  debug(udec(success))
+
+  success := fat.listName()
+  debug(zstr(string("listName:")))
+  debug(zstr(success))
+
   bytemove(@serial_output_preamble, string("$RQADS"), 6)
 
-  debug_term.start(RX1, TX1, %0000, BR_DEBUG_TERM)
   serial.start(RX0, TX0, %0000, BR_SERIAL)
   read := BUFFER_SIZE
   adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
@@ -58,9 +76,8 @@ pub main() | c, correct
         serial_input_buffer[serial_input_buffer_pos] := c
         serial_input_buffer_pos := (serial_input_buffer_pos + 1) +// SERIAL_BUFFER_SIZE
         serial_input_buffer[serial_input_buffer_pos] := 0 ' terminate
-        debug_term.fstr4(string("%c:%2.2x %s %2.2x\r\n"), c, c, serial_input_buffer, serial_input_buffer_pos)
+
         if c == LF
-          debug_term.fstr0(string("checking if we got a datagram\r\n"))
           if rq_datagram()
             correct := rq_process()
           reset_buffer()
@@ -86,23 +103,17 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
     if serial_input_buffer[0] == DOLLAR and serial_input_buffer[p - 1] == LF and serial_input_buffer[p - 2] == CR and serial_input_buffer[p - 5] == ASTERISK
       wire_checksum := decode_nibble(serial_input_buffer[p - 4]) << 4 | decode_nibble(serial_input_buffer[p - 3])
       local_checksum := compute_checksum(@serial_input_buffer[1], @serial_input_buffer[p - 6])
-      debug_term.fstr2(string("wire checksum is: %2.2x, local checksum %2.2x\r\n"), wire_checksum, local_checksum)
       result := wire_checksum == local_checksum
   return result
 
 pri rq_process() : result | payload_length
   payload_length := serial_input_buffer_pos - 6 - 5 ' remove $RQADS and *XX\r\n
-  debug_term.str(string("processing datagram: "))
-  debug_term.substr(@payload, payload_length)
-  debug_term.fstr0(string("\r\n"))
   case payload[0]
     "P" : result := rq_ping(payload_length)
-
 
 pri rq_ping(payload_length) : result
   if payload_length <> 1
     return FALSE
-  debug_term.fstr0(string("Got PING, send PONG\r\n"))
   rq_send_str(string("P"))
   return TRUE
 
@@ -110,14 +121,12 @@ pri rq_send_str(str_addr) | l
   l := strsize(str_addr)
   bytemove(@serial_output_buffer, str_addr, l)
   rq_finalize(l)
-  debug_term.substr(@serial_output_preamble, 6 + 5 + l)
   serial.substr(@serial_output_preamble, 6 + 5 + l)
 
 pri rq_finalize(length) | checksum, i
   checksum := 0
   repeat i from 1 to length + 5 ' the RQADS is included in the checksum!
     checksum ^= serial_output_preamble[i]
-  debug_term.fstr1(string("checksum: %2.2x\r\n"), checksum)
   serial_output_buffer[length] := ASTERISK
   serial_output_buffer[length + 1] := encode_nibble(checksum >> 4)
   serial_output_buffer[length + 2] := encode_nibble(checksum & $f)
