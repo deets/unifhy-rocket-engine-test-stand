@@ -27,7 +27,7 @@ def conn():
 
 def test_ping(conn):
     conn.write(rqads("P"))
-    print(conn.readline())
+    print("ping answer", conn.readline())
 
 
 def test_rate(conn):
