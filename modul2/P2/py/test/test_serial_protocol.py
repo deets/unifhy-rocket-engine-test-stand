@@ -42,7 +42,9 @@ def test_thinning(conn):
 
 def test_cdac(conn):
     conn.write(rqads("R$03"))   # 0b00000011, 2.5 SPS
-    conn.write(rqads("T$14"))
-    conn.write(rqads("C1$08"))  # channel 0, single-sided
-    while True:
+    conn.write(rqads("T$00"))
+    conn.write(rqads("C2$08$18"))  # channel 0, single-sided
+    for _ in range(20):
         print(conn.readline())
+    # just for termination
+    conn.write(rqads("P"))

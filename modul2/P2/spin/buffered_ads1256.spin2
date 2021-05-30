@@ -73,6 +73,9 @@ pub read_continuous() : timestamp, mux, value | rpos
   LONG[output_buffer_address][0] := (rpos + 1) +// output_buffer_size
   return timestamp, mux, value
 
+pub stop_continuous_read()
+  cogatn(1 << cog)
+
 pub available(): result
   ' (write + size - read) % size
   result := (LONG[output_buffer_address][1] + output_buffer_size - LONG[output_buffer_address][0]) +// output_buffer_size
