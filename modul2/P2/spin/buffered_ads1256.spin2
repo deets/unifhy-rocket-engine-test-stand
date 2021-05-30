@@ -53,7 +53,7 @@ pub read_single_sided(channel): result
   return a
 
 pub start_continuous_read(mux_buffer_address, mux_buffer_size)
-  ' The contennts of mux_buffer_address
+  ' The contents of mux_buffer_address
   ' is expected to stay constant during the
   ' continuous data acquisition, as it contains
   ' the mux register values that are being issued

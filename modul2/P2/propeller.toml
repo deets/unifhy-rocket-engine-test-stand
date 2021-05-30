@@ -1,5 +1,6 @@
 [project]
 main-file="spin/serial-frontend.spin2"
+#main-file="spin/ads-test.spin2"
 libraries=[
   "~/software/vc/propeller/libraries/community/p2/All/jm_full_duplex_serial",
   "~/software/vc/propeller/libraries/community/p2/All/jm_ez_spi",

@@ -4,7 +4,7 @@ import pytest
 import operator
 from functools import reduce
 
-PORT = "/dev/serial/by-id/usb-Parallax_Inc_Propeller_P2-EVAL_PLX4L28HW-if00-port0"
+PORT = "/dev/serial/by-id/usb-FTDI_USB__-__Serial-if00-port0"
 BAUD = 115200
 
 
@@ -27,4 +27,9 @@ def conn():
 
 def test_ping(conn):
     conn.write(rqads("P"))
+    print(conn.readline())
+
+
+def test_rate(conn):
+    conn.write(rqads("R$F0"))
     print(conn.readline())
