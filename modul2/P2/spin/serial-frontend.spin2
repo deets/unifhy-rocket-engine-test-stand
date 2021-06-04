@@ -112,11 +112,11 @@ pri rq_process() : result | payload_length
 
 pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   ' A cdac command looks like
-  ' C<N>$XY{N}
+  ' C<N>:XY{N}
   ' where N is the number of mux-instructions
   ' that must be in 1..8 and then N mux-instructions
   debug(zstr(string("rq_cdac")))
-  if payload_length < 5 ' RN$XY
+  if payload_length < 5 ' RN:XY
     debug(zstr(string("cdac minimal length violation")))
     return FALSE
   payload_offset := 1
@@ -128,7 +128,7 @@ pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   debug(zstr(string("cdac mux")))
   debug(udec(mux_buffer_length))
   payload_offset += 1 ' skip N
-  ' we must have $XY worth mux_buffer_length
+  ' we must have :XY worth mux_buffer_length
   if payload_offset + 3 * mux_buffer_length > payload_length
     debug(zstr(string("cdac payload length violation")))
     debug(udec(payload_length))
@@ -138,7 +138,7 @@ pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   debug(udec(mux_buffer_length))
 
   repeat buffer_offset from 0 to mux_buffer_length - 1
-    payload_offset += 1 ' skip $
+    payload_offset += 1 ' skip :
     mux_buffer[buffer_offset] := read_hex_byte(payload_offset)
     payload_offset += 2 ' skip XY
     debug(zstr(string("mux")))
@@ -180,11 +180,11 @@ pri do_cdac() | mux, timestamp, value, thinning_count
 
 pri rq_rate(payload_length) : result | rate
   debug(zstr(string("rq_rate")))
-  if payload_length <> 4 ' R$XY
+  if payload_length <> 4 ' R:XY
     return FALSE
-  if payload[1] <> "$"
+  if payload[1] <> ":"
     return FALSE
-  rate := read_hex_byte(2) ' read the hex number directly after R$
+  rate := read_hex_byte(2) ' read the hex number directly after R:
   adc.wreg(adc.RDRATE, rate)
   debug(uhex_byte(rate))
   rq_send_str(string("R"))
@@ -192,11 +192,11 @@ pri rq_rate(payload_length) : result | rate
 
 pri rq_thinning(payload_length) : result | rate
   debug(zstr(string("rq_thinning")))
-  if payload_length <> 4 ' T$XY
+  if payload_length <> 4 ' T:XY
     return FALSE
-  if payload[1] <> "$"
+  if payload[1] <> ":"
     return FALSE
-  thinning := read_hex_byte(2) ' read the hex number directly after R$
+  thinning := read_hex_byte(2) ' read the hex number directly after R:
   debug(uhex_byte(thinning))
   rq_send_str(string("T"))
   return TRUE
@@ -252,7 +252,7 @@ pri rq_send_str(str_addr) | l
   serial_output_buffer_pos += l
 
 pri rq_send_hex_long(value) | shift, h
-  rq_send_str(string("$"))
+  rq_send_str(string(":"))
   shift := 28
   repeat 8
     h := (value >> shift) & $f
@@ -261,7 +261,7 @@ pri rq_send_hex_long(value) | shift, h
     shift -= 4
 
 pri rq_send_hex_byte(value) | shift, h
-  rq_send_str(string("$"))
+  rq_send_str(string(":"))
   shift := 4
   repeat 2
     h := (value >> shift) & $f

@@ -31,19 +31,19 @@ def test_ping(conn):
 
 
 def test_rate(conn):
-    conn.write(rqads("R$F0"))
+    conn.write(rqads("R:F0"))
     print(conn.readline())
 
 
 def test_thinning(conn):
-    conn.write(rqads("T$0a"))
+    conn.write(rqads("T:0a"))
     print(conn.readline())
 
 
 def test_cdac(conn):
-    conn.write(rqads("R$03"))   # 0b00000011, 2.5 SPS
-    conn.write(rqads("T$00"))
-    conn.write(rqads("C2$08$18"))  # channel 0, single-sided
+    conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
+    conn.write(rqads("T:00"))
+    conn.write(rqads("C2:08:18"))  # channel 0, single-sided
     for _ in range(20):
         print(conn.readline())
     # just for termination
