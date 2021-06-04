@@ -6,12 +6,14 @@ con
   SD_CLK = 61
 
 var
+  byte cmd, cog
   word file_index
+  byte filename[13]
   long stack[1024]
 obj
   fat : "FAT32"
 
-pub start() : cog
+pub start() : result
   cog := cogspin(NEWCOG, main(cogid()), @stack)
   waitatn()
   return cog + 1
@@ -33,6 +35,30 @@ pri main(caller_cog) | success
     debug(zstr(string("file_index")))
     debug(udec(file_index))
   cogatn(1 << caller_cog)
+  mainloop()
+
+pub begin()
+  cmd := "b"
+  cogatn(1 << cog)
+
+pri mainloop()
+  repeat
+    waitatn()
+    case cmd
+      "b" : cmd_begin()
+
+pri cmd_begin()
+  debug(zstr(string("cmd_begin")))
+  bytemove(@filename, string("RQADSXXX.DAT"), 12)
+  filename[12] := 0
+  filename[5] := encode_nibble(file_index >> 8 & $f)
+  filename[6] := encode_nibble(file_index >> 4 & $f)
+  filename[7] := encode_nibble(file_index & $f)
+  file_index += 1
+  debug(zstr(@filename))
+  fat.newFile(@filename)
+  fat.closeFile()
+
 
 pri find_last_file_index() : result | name, h
   result := 0
@@ -44,8 +70,9 @@ pri find_last_file_index() : result | name, h
     if strsize(name) == 12 and startswith(string("RQADS"), name) and !endswith(string("~1.DAT"), name)
       debug(zstr(string("found RQADSXXX.DAT")))
       debug(zstr(name))
-      h := decode_nibble(BYTE[name][5]) << 16 | decode_nibble(BYTE[name][6]) << 8 | decode_nibble(BYTE[name][7])
+      h := decode_nibble(BYTE[name][5]) << 8 | decode_nibble(BYTE[name][6]) << 4 | decode_nibble(BYTE[name][7])
       result #>= h
+  result &= $fff
 
 pri startswith(prefix, s) : result | i, size
   size := strsize(prefix)
@@ -64,3 +91,8 @@ pri decode_nibble(c) : result
   if result > 9 ' we assume A-F
     result &= %1011111 ' enforce upper case ASCII
     result -= 7
+
+pri encode_nibble(c) : result
+  result := c + $30 ' convert to ascii 0..9
+  if c > 9 ' we are in A-F territory
+    result += 7
