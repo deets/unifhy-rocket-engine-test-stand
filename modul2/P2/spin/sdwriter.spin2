@@ -1,0 +1,66 @@
+con
+  ' P2 Eval Board Assignment
+  SD_DO = 58
+  SD_DI = 59
+  SD_CS = 60
+  SD_CLK = 61
+
+var
+  word file_index
+  long stack[1024]
+obj
+  fat : "FAT32"
+
+pub start() : cog
+  cog := cogspin(NEWCOG, main(cogid()), @stack)
+  waitatn()
+  return cog + 1
+
+pri main(caller_cog) | success
+  success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
+  debug(zstr(string("fatenginestart:")))
+  debug(udec(success))
+
+  debug(zstr(string("mount:")))
+  success := \fat.mountPartition(0)
+  if success > 0
+    debug(zstr(string("mounting failed")))
+    debug(zstr(success))
+    debug(zstr(string("formatting")))
+    fat.formatPartition(0)
+  else
+    file_index := find_last_file_index() + 1
+    debug(zstr(string("file_index")))
+    debug(udec(file_index))
+  cogatn(1 << caller_cog)
+
+pri find_last_file_index() : result | name, h
+  result := 0
+  repeat
+    fat.listEntries("N")
+    name := fat.listName()
+    if strsize(name) == 0
+      quit
+    if strsize(name) == 12 and startswith(string("RQADS"), name) and !endswith(string("~1.DAT"), name)
+      debug(zstr(string("found RQADSXXX.DAT")))
+      debug(zstr(name))
+      h := decode_nibble(BYTE[name][5]) << 16 | decode_nibble(BYTE[name][6]) << 8 | decode_nibble(BYTE[name][7])
+      result #>= h
+
+pri startswith(prefix, s) : result | i, size
+  size := strsize(prefix)
+  result := TRUE
+  repeat i from 0 to size - 1
+    result &= BYTE[prefix][i] == BYTE[s][i]
+
+pri endswith(suffix, s) : result | offset
+  result := FALSE
+  offset := strsize(s) - strsize(suffix)
+  if offset > 0
+    return startswith(suffix, s + offset)
+
+pri decode_nibble(c) : result
+  result := c - $30 ' convert from ascii into 0..9
+  if result > 9 ' we assume A-F
+    result &= %1011111 ' enforce upper case ASCII
+    result -= 7

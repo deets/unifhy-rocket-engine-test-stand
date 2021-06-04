@@ -47,7 +47,7 @@ var
 obj
   adc : "buffered_ads1256"
   serial : "jm_fullduplexserial"
-  fat: "FAT32"
+  sdwriter: "sdwriter"
 
 pub main() | c, correct, success
   bytemove(@serial_output_preamble, string("$RQADS"), 6)
@@ -57,7 +57,7 @@ pub main() | c, correct, success
   serial.start(RX0, TX0, %0000, BR_SERIAL)
   read := BUFFER_SIZE
   adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
-
+  sdwriter.start()
   serial_input_buffer_pos := 0
 
   repeat
