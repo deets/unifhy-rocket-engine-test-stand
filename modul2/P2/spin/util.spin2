@@ -1,0 +1,41 @@
+pub decode_nibble(c) : result
+  result := c - $30 ' convert from ascii into 0..9
+  if result > 9 ' we assume A-F
+    result &= %1011111 ' enforce upper case ASCII
+    result -= 7
+
+pub encode_nibble(c) : result
+  result := c + $30 ' convert to ascii 0..9
+  if c > 9 ' we are in A-F territory
+    result += 7
+
+pub decode_hex_byte(address) : result
+  result := decode_nibble(BYTE[address]) << 4
+  result |= decode_nibble(BYTE[address + 1])
+
+pub compute_checksum(start, stop) : result | i
+  result := 0
+  repeat i from start to stop
+    result ^= BYTE[i]
+  return result
+
+pub encode_hex_long(address, value): result
+  return encode_hex_nibbles(address, value, 8)
+
+pub encode_hex_byte(address, value): result
+  return encode_hex_nibbles(address, value, 2)
+
+pub encode_hex_nibbles(address, value, count): result | shift, h, i
+  shift := (count - 1) * 4
+  repeat i from 0 to count - 1
+    h := (value >> shift) & $f
+    BYTE[address + i] := encode_nibble(h)
+    shift -= 4
+  return count
+
+pub decode_hex_nibbles(address, count): result | i
+  result := 0
+  repeat i from 0 to count - 1
+    result <<= 4
+    result |= decode_nibble(BYTE[address + i])
+  return result

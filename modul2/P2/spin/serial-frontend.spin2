@@ -7,6 +7,7 @@ con
   BR_SERIAL = 115200
 
   DEBUG_BAUD  = 230_400
+  DEBUG_COGS = %11111110
 
   ADC_CLK = 16
   ADC_SDO = 17
@@ -45,9 +46,10 @@ var
   BYTE mux_buffer_length
 
 obj
-  adc : "buffered_ads1256"
-  serial : "jm_fullduplexserial"
+  adc: "buffered_ads1256"
+  serial: "jm_fullduplexserial"
   sdwriter: "sdwriter"
+  util: "util"
 
 pub main() | c, correct, success
   bytemove(@serial_output_preamble, string("$RQADS"), 6)
@@ -97,8 +99,8 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
   if serial_input_buffer_pos >= 11 ' $RQADS*AB\r\n is 11 characters long
     p := serial_input_buffer_pos
     if serial_input_buffer[0] == DOLLAR and serial_input_buffer[p - 1] == LF and serial_input_buffer[p - 2] == CR and serial_input_buffer[p - 5] == ASTERISK
-      wire_checksum := decode_nibble(serial_input_buffer[p - 4]) << 4 | decode_nibble(serial_input_buffer[p - 3])
-      local_checksum := compute_checksum(@serial_input_buffer[1], @serial_input_buffer[p - 6])
+      wire_checksum := util.decode_hex_byte(@serial_input_buffer[p - 4])
+      local_checksum := util.compute_checksum(@serial_input_buffer[1], @serial_input_buffer[p - 6])
       result := wire_checksum == local_checksum
   return result
 
@@ -121,7 +123,7 @@ pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
     return FALSE
   payload_offset := 1
   buffer_offset := 0
-  mux_buffer_length := decode_nibble(payload[payload_offset])
+  mux_buffer_length := util.decode_nibble(payload[payload_offset])
   if mux_buffer_length < 0 and mux_buffer_length > 8
     debug(zstr(string("cdac mux length violation")))
     return FALSE
@@ -139,7 +141,7 @@ pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
 
   repeat buffer_offset from 0 to mux_buffer_length - 1
     payload_offset += 1 ' skip :
-    mux_buffer[buffer_offset] := read_hex_byte(payload_offset)
+    mux_buffer[buffer_offset] := util.decode_hex_byte(@payload + payload_offset)
     payload_offset += 2 ' skip XY
     debug(zstr(string("mux")))
     debug(udec(buffer_offset))
@@ -185,7 +187,7 @@ pri rq_rate(payload_length) : result | rate
     return FALSE
   if payload[1] <> ":"
     return FALSE
-  rate := read_hex_byte(2) ' read the hex number directly after R:
+  rate := util.decode_hex_byte(@payload + 2) ' read the hex number directly after R:
   adc.wreg(adc.RDRATE, rate)
   debug(uhex_byte(rate))
   rq_send_str(string("R"))
@@ -197,7 +199,7 @@ pri rq_thinning(payload_length) : result | rate
     return FALSE
   if payload[1] <> ":"
     return FALSE
-  thinning := read_hex_byte(2) ' read the hex number directly after R:
+  thinning := util.decode_hex_byte(@payload + 2) ' read the hex number directly after R:
   debug(uhex_byte(thinning))
   rq_send_str(string("T"))
   return TRUE
@@ -217,33 +219,12 @@ pri rq_finalize(length) | checksum, i
   repeat i from 1 to length + 5 ' the RQADS is included in the checksum!
     checksum ^= serial_output_preamble[i]
   serial_output_buffer[length] := ASTERISK
-  serial_output_buffer[length + 1] := encode_nibble(checksum >> 4)
-  serial_output_buffer[length + 2] := encode_nibble(checksum & $f)
+  serial_output_buffer[length + 1] := util.encode_nibble(checksum >> 4)
+  serial_output_buffer[length + 2] := util.encode_nibble(checksum & $f)
   serial_output_buffer[length + 3] := 13 ' \r
   serial_output_buffer[length + 4] := 10 ' \n
   serial.substr(@serial_output_preamble, 6 + 5 + serial_output_buffer_pos)
   serial_output_buffer_pos := 0
-
-pri read_hex_byte(payload_offset): result
-  result := decode_nibble(payload[payload_offset]) << 4
-  result |= decode_nibble(payload[payload_offset + 1])
-
-pri decode_nibble(c) : result
-  result := c - $30 ' convert from ascii into 0..9
-  if result > 9 ' we assume A-F
-    result &= %1011111 ' enforce upper case ASCII
-    result -= 7
-
-pri encode_nibble(c) : result
-  result := c + $30 ' convert to ascii 0..9
-  if c > 9 ' we are in A-F territory
-    result += 7
-
-pri compute_checksum(start, stop) : result | i
-  result := 0
-  repeat i from start to stop
-    result ^= BYTE[i]
-  return result
 
 pri rq_send_str(str_addr) | l
   l := strsize(str_addr)
@@ -254,18 +235,8 @@ pri rq_send_str(str_addr) | l
 
 pri rq_send_hex_long(value) | shift, h
   rq_send_str(string(":"))
-  shift := 28
-  repeat 8
-    h := (value >> shift) & $f
-    serial_output_buffer[serial_output_buffer_pos] := encode_nibble(h)
-    serial_output_buffer_pos += 1
-    shift -= 4
+  serial_output_buffer_pos += util.encode_hex_long(@serial_output_buffer + serial_output_buffer_pos, value)
 
 pri rq_send_hex_byte(value) | shift, h
   rq_send_str(string(":"))
-  shift := 4
-  repeat 2
-    h := (value >> shift) & $f
-    serial_output_buffer[serial_output_buffer_pos] := encode_nibble(h)
-    serial_output_buffer_pos += 1
-    shift -= 4
+  serial_output_buffer_pos += util.encode_hex_byte(@serial_output_buffer + serial_output_buffer_pos, value)
