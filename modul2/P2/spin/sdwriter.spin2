@@ -48,11 +48,11 @@ pri mainloop()
   repeat
     waitatn()
     case cmd
-      "b" : cmd_begin()
+      "b" : sync_cmd_begin()
     cmd := "0"
 
-pri cmd_begin() | success
-  debug(zstr(string("cmd_begin")))
+pri sync_cmd_begin() | success
+  debug(zstr(string("sync_cmd_begin")))
   bytemove(@filename, string("RQADSXXX.DAT"), 12)
   filename[12] := 0
   util.encode_hex_nibbles(@filename + 5, file_index, 3)
