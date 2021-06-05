@@ -1,0 +1,32 @@
+var
+  long read_pos
+  long write_pos
+  long datagram_size
+  long capacity ' in datagram_size
+  long buffer_address
+
+pub init(datagram_size_, capacity_, buffer_address_)
+  datagram_size := datagram_size_
+  capacity := capacity_
+  buffer_address := buffer_address_
+  read_pos := 0
+  write_pos := 0
+
+{
+  The number of stored datagrams
+}
+pub available(): result
+  ' (write + size - read) % size
+  return (write_pos + capacity - read_pos) +// capacity
+
+pub store(address)
+  bytemove(buffer_address + write_pos * datagram_size, address, datagram_size)
+  write_pos := (write_pos + 1) +// capacity
+
+pub fetch(address) : result
+  if available()
+    bytemove(address, buffer_address + read_pos * datagram_size, datagram_size)
+    read_pos := (read_pos + 1) +// capacity
+    return TRUE
+  else
+    return FALSE

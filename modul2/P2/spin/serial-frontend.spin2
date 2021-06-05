@@ -164,14 +164,18 @@ pri do_cdac() | mux, timestamp, value, thinning_count
       repeat until adc.available() > 0
         if serial.available() > 0
           adc.stop_continuous_read()
+          ' TODO: consume the rest of the buffer before
+          ' closing down
+          sdwriter.end()
           return
       timestamp, mux, value := adc.read_continuous()
+      sdwriter.feed(timestamp, mux, value)
       if thinning == 0 or thinning_count == 0
         thinning_count := thinning
-        debug(zstr(string("----")))
-        debug(uhex(timestamp))
-        debug(uhex_byte(mux))
-        debug(uhex_long(value))
+        ' debug(zstr(string("----")))
+        ' debug(uhex(timestamp))
+        ' debug(uhex_byte(mux))
+        ' debug(uhex_long(value))
 
         rq_send_str(string("C"))
         rq_send_hex_long(timestamp)

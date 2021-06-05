@@ -41,10 +41,11 @@ def test_thinning(conn):
 
 
 def test_cdac(conn):
-    conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
-    conn.write(rqads("T:00"))
+    #conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
+    conn.write(rqads("R:F0"))   # 0b11110000, 30K SPS
+    conn.write(rqads("T:FF"))  # maximum thinning,
     conn.write(rqads("C2:08:18"))  # channel 0, single-sided
-    for _ in range(5):
+    for _ in range(500):
         print(conn.readline())
     # just for termination
     conn.write(rqads("P"))

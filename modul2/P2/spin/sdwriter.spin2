@@ -5,16 +5,26 @@ con
   SD_CS = 60
   SD_CLK = 61
 
+  LINE_SIZE = 16 ' <8>:<2>:<6>\r\n
+  DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
+  BUFFER_CAPACITY = 512 ' (4K / ~20 Bytes line)  * 2 plus something
+
 var
   byte cmd, cog, caller_cog
   word file_index
   byte filename[13]
   long stack[2048]
+  long buffer[DATAGRAM_SIZE / 4 * BUFFER_CAPACITY]
+  long entry[2]
+  byte line_buffer[LINE_SIZE]
+  long write_entry[2]
 obj
   fat: "FAT32"
   util: "util"
+  rb: "ringbuffer"
 
 pub start() : result
+  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @buffer)
   cog := cogspin(NEWCOG, main(cogid()), @stack)
   waitatn()
   return cog + 1
@@ -30,8 +40,6 @@ pri main(caller_cog_) | success
   if success > 0
     debug(zstr(string("mounting failed")))
     debug(zstr(success))
-    debug(zstr(string("formatting")))
-    fat.formatPartition(0)
   else
     file_index := find_last_file_index() + 1
     debug(zstr(string("file_index")))
@@ -44,6 +52,18 @@ pub begin()
   cogatn(1 << cog)
   waitatn()
 
+pub end()
+  ' we don't need a command, begin
+  ' put us into a loop that we
+  ' leave using atn
+  cogatn(1 << cog)
+  waitatn()
+
+pub feed(timestamp, mux, value)
+  entry[0] := timestamp
+  entry[1] := mux << 24 | value & $00ffffff
+  rb.store(@entry)
+
 pri mainloop()
   repeat
     waitatn()
@@ -51,7 +71,7 @@ pri mainloop()
       "b" : sync_cmd_begin()
     cmd := "0"
 
-pri sync_cmd_begin() | success
+pri sync_cmd_begin() | success, byte_counter
   debug(zstr(string("sync_cmd_begin")))
   bytemove(@filename, string("RQADSXXX.DAT"), 12)
   filename[12] := 0
@@ -59,11 +79,49 @@ pri sync_cmd_begin() | success
   file_index += 1
   debug(zstr(@filename))
   success := \fat.newFile(@filename)
+  if success <> 0
+    debug(zstr(string("fat.newFile:error")))
+    debug(zstr(success))
+  fat.openFile(@filename, "W")
   debug(zstr(string("fat.newFile")))
   debug(udec(result))
+  cogatn(1 << caller_cog)
+
+  byte_counter := 0
+  repeat until pollatn() == -1
+    repeat while rb.available()
+      byte_counter += write_line()
+      if byte_counter >= 512
+        fat.flushData()
+        byte_counter := 0
+  ' cleanup and signal the end call
+  repeat while rb.available()
+    write_line()
+  fat.flushData()
   fat.closeFile()
   cogatn(1 << caller_cog)
 
+pri write_line(): result | mux, value, pos, err
+  rb.fetch(@write_entry)
+  mux := write_entry[1] >> 24
+  value := write_entry[1] & $ffffff
+  pos := 0
+  pos += util.encode_hex_long(@line_buffer + pos, write_entry[0])
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_byte(@line_buffer + pos, mux)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
+  line_buffer[pos] := 13
+  line_buffer[pos + 1] := 10
+  pos += 2
+  line_buffer[pos] := 0
+  fat.writeData(@line_buffer, pos)
+  if err <> 0
+    debug(zstr(string("writeData:error")))
+    debug(zstr(err))
+  return pos
 
 pri find_last_file_index() : result | name, h
   result := 0
@@ -76,6 +134,7 @@ pri find_last_file_index() : result | name, h
       h := util.decode_hex_nibbles(name + 5, 3)
       debug(zstr(string("found RQADSXXX.DAT")))
       debug(zstr(name))
+      debug(udec(fat.listSize()))
       result #>= h
   result &= $fff
 
