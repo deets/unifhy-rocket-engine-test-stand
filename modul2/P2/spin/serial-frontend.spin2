@@ -157,8 +157,8 @@ pri do_cdac() | mux, timestamp, value, thinning_count
   serial_output_buffer_pos := 0
 
   repeat
-    ' we always want to send all mux values, even
-    ' when thinning!
+    ' we always want to send all mux values,
+    ' thinning applies to full sets of values
     repeat mux_buffer_length
       ' any data on serial stops cdac
       repeat until adc.available() > 0
