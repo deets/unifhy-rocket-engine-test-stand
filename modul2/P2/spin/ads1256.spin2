@@ -12,7 +12,7 @@ con
 var
   byte cs_pin, drdy_pin, pdwn_pin
 obj
-  spi : "jm_ez_spi"
+  spi : "deets_spi"
 
 pub start(sdipin, sdopin, sckpin, cs_pin_, drdy_pin_, pdwn_pin_) : result
   cs_pin := cs_pin_
