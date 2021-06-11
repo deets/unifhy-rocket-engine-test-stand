@@ -7,7 +7,7 @@ con
 
   LINE_SIZE = 16 ' <8>:<2>:<6>\r\n
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 10000 ' ~80KB
+  BUFFER_CAPACITY = 1250
   FLUSH_AFTER_BYTES = 4096
 
 var
