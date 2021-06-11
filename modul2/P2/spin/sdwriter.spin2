@@ -7,7 +7,8 @@ con
 
   LINE_SIZE = 16 ' <8>:<2>:<6>\r\n
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 512 ' (4K / ~20 Bytes line)  * 2 plus something
+  BUFFER_CAPACITY = 10000 ' ~80KB
+  FLUSH_AFTER_BYTES = 4096
 
 var
   byte cmd, cog, caller_cog
@@ -91,7 +92,7 @@ pri sync_cmd_begin() | success, byte_counter
   repeat until pollatn() == -1
     repeat while rb.available()
       byte_counter += write_line()
-      if byte_counter >= 512
+      if byte_counter >= FLUSH_AFTER_BYTES
         fat.flushData()
         byte_counter := 0
   ' cleanup and signal the end call
