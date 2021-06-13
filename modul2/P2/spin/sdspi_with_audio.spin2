@@ -17,8 +17,6 @@ CON 'See end of file for license
 CON
     'SPI_COG=6 'cog to use
 
-ALAW_BASESHL = 3
-
 VAR  byte cog
 
 PUB Stop()
@@ -61,31 +59,6 @@ PUB getMailbox():r
 pub readblocks(n,b,p):r  'use multi-block read n=#blocks to read, b=block#, p=pointer to write to'Note:  Currently have to re-mount after using this...
     return DoCommand("F", n, b, p)   'note:  usage of "n" and "b" is not the same as above...
 
-PUB ConfigureDAC(left,right,rate,bus_hog) : using_pwm | period,mode
-
-period := clkfreq/rate
-if period & 255
-  mode := P_DAC_75R_2V|P_OE|P_DAC_DITHER_RND
-  using_pwm := false
-else
-  mode := P_DAC_75R_2V|P_OE|P_DAC_DITHER_PWM
-  using_pwm := true
-
-DoCommandAsync("D",(left&$FF)+(right&$FF)<<8+(bus_hog?negx:0),mode,period)
-
-PUB setMusic(startblk,endblk,restartblk)
-  DoCommandAsync("M",startblk,endblk,restartblk)
-PUB stopMusic()
-  setMusic(0,0,0)
-
-PUB setSFX(startblk,endblk,restartblk)
-  DoCommandAsync("S",startblk,endblk,restartblk)
-PUB stopSFX()
-  setSFX(0,0,0)
-
-PUB getSubcodePtr() :result
- return @subcode
-
 PRI GetBitTime(max_clkfreq) : bt
     bt :=((clkfreq / max_clkfreq) /2 )+1   ' SPI bit time
     if bt < 2                              ' make sure at least sysclock /2
@@ -110,20 +83,8 @@ PRI getmask(clk, data) : t
 DAT
                 org
 _asm_start      mov     ptr_to_mbox,    ptra                ' save mbox address for later
-                mov     music_buffer1,  ptr_to_mbox
-                add     music_buffer1,  #@musicHubBuffer1-@cmd
-                mov     music_buffer2,  ptr_to_mbox
-                add     music_buffer2,  ##@musicHubBuffer2-@cmd
-                mov     sfx_buffer1,    ptr_to_mbox
-                add     sfx_buffer1,    ##@sfxHubBuffer1-@cmd
-                mov     sfx_buffer2,    ptr_to_mbox
-                add     sfx_buffer2,    ##@sfxHubBuffer2-@cmd
-                'drvnot #25 'debug
 
 get_cmd
-                '' Check audio first
-                tjnz sfxrequest,#service_sfx
-                tjnz musicrequest,#service_music
                 '' get parameters from spin
                 rdlong cmd_in, ptra wz '
                 '' timeout and release card after 10s
@@ -140,16 +101,10 @@ get_cmd
         if_z    jmp     #write_b
                 cmp     cmd_in,         #"F"    wz
         if_z    jmp     #read_multi
-                cmp     cmd_in,         #"S"    wz
-        if_z    jmp     #sfx_cmd
-                cmp     cmd_in,         #"M"    wz
-        if_z    jmp     #music_cmd
                 cmp     cmd_in,         #"i"    wz
         if_z    jmp     #do_init
                 cmp     cmd_in,         #"c"    wz
         if_z    call    #card_init
-                cmp     cmd_in,         #"D"    wz
-        if_z    jmp     #dac_config
                 cmp     cmd_in,         #"z"    wz
         if_z    jmp     #card_release
                 mov     err_out,        #5                  ' err = no command                 '
@@ -159,8 +114,6 @@ get_cmd
 
 DAT 'end_cmd               '' do commands
 end_cmd
-                testn   bus_hog_flag,#0 wz
-                drvz    pinCS               ' set cs high if not in bus hog mode
                 test    rq_done,#511    wz
         if_nz   altd    rq_done
         if_nz   mov     0-0,#0
@@ -307,175 +260,6 @@ write_b         '' arg1 is sd ptr, arg2 is hub
                 cmp     reply,          #5              wz
     if_nz       mov     err_out,        ##-42               ' err = bwrite timeout
                 call    #sd_busy
-                jmp     #end_cmd
-
-DAT 'audio_irq
-audio_irq
-              ' write sample to DAC
-
-                cmps pinRight,#0 wcz
-        if_b    adds left_next,right_next
-        if_b    sar left_next,#1
-                add left_next,logical_center
-                add right_next,logical_center
-                sca left_next,dac_scale
-                mov left_next,0-0
-                sca right_next,dac_scale
-                mov right_next,0-0
-                wypin left_next,pinLeft
-        if_ae   wypin right_next,pinRight
-
-                ' prepare next sample
-
-do_music        tjz music_left,#music_chkrq ' don't update music if data is behind
-
-                ' load, seperate and sign-extend samples
-                rdlong rightmusic,music_ptr
-                getword leftmusic,rightmusic,#1
-                signx leftmusic,#15
-                signx rightmusic,#15
-                sar leftmusic,#1
-                sar rightmusic,#1
-
-                add music_ptr,#4
-                djnz music_left,#music_done
-music_chkrq
-                tjnz musicrequest,#music_done ' still busy (bad!)
-
-
-                mov atmp2,ptr_to_mbox
-                add atmp2,#(@subcode - @cmd) ' pointer to subcode box
-
-              ' figure out which buffers to play/fill
-                mov atmp1,musicrq_dst wz ' set Z if there was no previous request
-        if_nz   mov music_left,#512/4 ' samples ber buffer
-        if_nz   rdlong atmp3,atmp1
-        if_nz   wrlong atmp3,atmp2 ' Subcode write HERE
-                mov music_ptr,atmp1
-                cmp atmp1,music_buffer1 wz
-        if_ne   mov musicrq_dst,music_buffer1
-        if_e    mov musicrq_dst,music_buffer2
-
-              ' request next block
-                testn musicblock,#0 wz
-        if_nz   add musicblock,#1
-                cmp musicblock,musicend wcz
-        if_ae   mov musicblock,musicrestart wz
-                mov musicrequest,musicblock wz
-        if_z    mov musicrq_dst,#0 ' music has ended, don't play garbo next time
-        if_z    mov leftmusic,#0
-        if_z    mov rightmusic,#0
-
-music_done
-
-do_sfx          tjz sfx_left,#sfx_chkrq ' don't update SFX if data is behind
-
-                '' load byte
-                rdbyte atmp1,sfx_ptr
-                add sfx_ptr,#1
-
-                '' Decompress A-law
-                xor atmp1,#$55
-                mov sfxsample,atmp1
-                getnib sfxsample,atmp1,#0 ' mantissa isolated
-                shl sfxsample,#ALAW_BASESHL
-                add sfxsample,alaw_bias
-                getnib atmp2,atmp1,#1
-                and atmp2,#7 wz ' exponent isolated
-        if_nz   add sfxsample,alaw_leading
-        if_nz   sub atmp2,#1
-                shl sfxsample,atmp2
-                test atmp1,#$80 wc
-                negnc sfxsample,sfxsample
-
-                djnz sfx_left,#sfx_done
-
-sfx_chkrq
-                tjnz sfxrequest,#sfx_done ' still busy (bad!)
-
-              ' figure out which buffers to play/fill
-                mov atmp1,sfxrq_dst  wz ' set Z if there was no previous request
-        if_nz   mov sfx_left,con512 ' samples per buffer
-                mov sfx_ptr,atmp1
-                cmp atmp1,sfx_buffer1 wz
-        if_ne   mov sfxrq_dst,sfx_buffer1
-        if_e    mov sfxrq_dst,sfx_buffer2
-
-              ' request next block
-                testn sfxblock,#0 wz
-        if_nz   add sfxblock,#1
-                cmp sfxblock,sfxend wcz
-        if_ae   mov sfxblock,sfxrestart
-                mov sfxrequest,sfxblock wz
-        if_z    mov sfxrq_dst,#0 ' sfx has ended, don't play garbo next time
-        if_z    mov sfxsample,#0
-
-sfx_done
-
-do_mixing
-               mov left_next,sfxsample
-               mov right_next,sfxsample
-               adds left_next,leftmusic
-               adds right_next,rightmusic
-
-               reti3
-
-DAT 'service_music
-service_music
-                mov arg1_in,musicrequest
-                mov arg2_in,musicrq_dst
-                mov rq_done,#musicrequest
-                jmp #read_a
-DAT 'service_sfx
-service_sfx
-                mov arg1_in,sfxrequest
-                mov arg2_in,sfxrq_dst
-                mov rq_done,#sfxrequest
-                jmp #read_a
-
-DAT 'music_cmd
-music_cmd
-                mov musicblock,arg1_in
-                mov musicend,arg2_in
-                mov musicrestart,arg3_in
-                jmp     #end_cmd
-
-DAT 'sfx_cmd
-sfx_cmd
-                mov sfxblock,arg1_in
-                mov sfxend,arg2_in
-                mov sfxrestart,arg3_in
-                jmp     #end_cmd
-
-DAT 'dac_config
-dac_config
-                rep @.noirq,#1
-                getbyte pinLeft,arg1_in,#0
-                getbyte pinRight,arg1_in,#1
-                signx pinRight,#7
-                cmps pinRight,#0 wcz
-                fltl pinLeft
-        if_ae   fltl pinRight
-                wrpin arg2_in,pinLeft
-        if_ae   wrpin arg2_in,pinRight
-                wxpin arg3_in,pinLeft
-        if_ae   wxpin arg3_in,pinRight
-                wypin dac_center,pinLeft
-        if_ae   wypin dac_center,pinRight
-                mov ijmp3,#audio_irq
-                mov tmp1,pinLeft
-                add tmp1,#%001_000000
-                setse3 tmp1
-                setint3 #EVENT_SE3
-                drvh pinLeft
-        if_ae   drvh pinRight
-
-                mov left_next,#0
-                mov right_next,#0
-
-                testb arg1_in,#31 wc
-                wrc bus_hog_flag
-.noirq
                 jmp     #end_cmd
 
 dat ' card_init
@@ -661,54 +445,8 @@ x           long    0 'for RJA
 
 con512 long 512
 
-dac_center    long $7F80
-dac_scale     long $FF00
-logical_center    long $8000
-
-alaw_bias     long $01<<(ALAW_BASESHL-1)
-alaw_leading  long $10<<ALAW_BASESHL
-
-bus_hog_flag long 0
 
 rq_done long 0 ' cog location to clear
-
-' how many samples left
-music_left long 0
-sfx_left   long 0
-
-' requests to SD code
-musicrequest long 0
-sfxrequest   long 0
-musicrq_dst  long 0
-sfxrq_dst    long 0
-
-' audio streaming parameters
-musicblock    long 0 ' in sectors
-musicend      long 0
-musicrestart  long 0
-sfxblock      long 0 ' in sectors
-sfxend        long 0
-sfxrestart    long 0
-
-
-left_next   res 1
-right_next  res 1
-leftmusic   res 1
-rightmusic  res 1
-sfxsample   res 1
-music_ptr   res 1
-sfx_ptr     res 1
-
-atmp1       res 1
-atmp2       res 1
-atmp3       res 1
-
-' Pointers to buffers
-music_buffer1           res 1
-music_buffer2           res 1
-sfx_buffer1             res 1
-sfx_buffer2             res 1
-
 
 ' loaded on init   ''15 longs CHZ code
 {=== Pin Variables ===}
