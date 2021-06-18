@@ -435,11 +435,6 @@ check_time      pollct1                             wc
                 jmp     #end_cmd
 
 
-dat 'wait_clock
-wait_clock      testp   pinCLK                      wc
-        if_nc   jmp     #wait_clock
-wait_clock_ret  ret
-
 DAT 'reserved and assigned data
 x           long    0 'for RJA
 
@@ -456,12 +451,6 @@ pinDI       res 1       ' di
 pinCS       res 1       ' chip select
 pinLeft     res 1       ' audio left
 pinRight    res 1       ' audio right
-{===== Smartpin Clock Variables =====}'' smartpins stuffs
-sp_doclk    res 1       ' smartpin mask for clock to do
-sp_diclk    res 1       ' smartpin mask for clock to di
-sp_bt       res 1       ' bit time
-sp_init_bt  res 1       ' bit time @400k
-sp_inv_pin  res 1       ' invert clock pin
 {===== Command Mailbox =====}
 ptr_to_mbox res 1       ' pointer to spin mailbo
 cmd_in      res 1       ' mailbox in
@@ -526,29 +515,10 @@ err     long 0
 
 subcode long 0
 
-musicHubBuffer1 byte 0[512]
-musicHubBuffer2 byte 0[512]
-sfxHubBuffer1 byte 0[512]
-sfxHubBuffer2 byte 0[512]
-
 {
 var    '' multi spin mailbox
 long  cmd, arg1, arg2, arg3, arg4, err
 }
-
-con smartpin_constants
-    '%AAAA_BBBB_FFF_PPPPPPPPPPPPP_TT_MMMMM_0
-                 ''PPPP_PPP_PPP_PPP
-    'ppp        =''xxxx_CIO_HHH_LLL
-    'sp_inv_pin  = %0000_001_000_000 << 8
-  'smartpin modes                    TT_MMMMM_0
-    sp_stx      =   %01_11100_0     ' +2
-    sp_srx      =   %00_11101_0     ' +3
-    sp_srx_c    =   %1_00111
-    sp_stx_c    =   %1_00111
-    sp_clk      =   %01_00101_0 '+ sp_inv_pin ' inv clock right way
-    byteclks    =   (2*8)
-
 
 CON 'MIT License Terms
 {{
