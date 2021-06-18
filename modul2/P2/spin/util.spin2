@@ -39,3 +39,20 @@ pub decode_hex_nibbles(address, count): result | i
     result <<= 4
     result |= decode_nibble(BYTE[address + i])
   return result
+
+pub startswith(prefix, s) : result | i, size
+  size := strsize(prefix)
+  result := TRUE
+  repeat i from 0 to size - 1
+    result &= BYTE[prefix][i] == BYTE[s][i]
+
+pub endswith(suffix, s) : result | offset
+  result := FALSE
+  offset := strsize(s) - strsize(suffix)
+  if offset > 0
+    return startswith(suffix, s + offset)
+
+pub timediff(earlier, later): result
+  result := later - earlier
+  if result +> 2147483648
+    result := $ffffffff - result + 1
