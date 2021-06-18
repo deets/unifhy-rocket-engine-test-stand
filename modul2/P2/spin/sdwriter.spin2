@@ -5,10 +5,12 @@ con
   SD_CS = 60
   SD_CLK = 61
 
-  LINE_SIZE = 16 ' <8>:<2>:<6>\r\n
+  LINE_SIZE = 20 '<8>:<2>:<6>\r\n
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 1250
+  BUFFER_CAPACITY = 50000
   FLUSH_AFTER_BYTES = 4096
+
+  SD_STATUS_PIN = 25
 
 var
   byte cmd, cog, caller_cog
@@ -31,6 +33,7 @@ pub start() : result
   return cog + 1
 
 pri main(caller_cog_) | success
+  pinhigh(SD_STATUS_PIN)
   caller_cog := caller_cog_
   success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
   debug(zstr(string("fatenginestart:")))
@@ -45,6 +48,7 @@ pri main(caller_cog_) | success
     file_index := find_last_file_index() + 1
     debug(zstr(string("file_index")))
     debug(uhex_word(file_index))
+    pinlow(SD_STATUS_PIN)
   cogatn(1 << caller_cog)
   mainloop()
 
@@ -105,23 +109,25 @@ pri sync_cmd_begin() | success, byte_counter
 pri write_line(): result | mux, value, pos, err
   rb.fetch(@write_entry)
   mux := write_entry[1] >> 24
-  value := write_entry[1] & $ffffff
   pos := 0
-  pos += util.encode_hex_long(@line_buffer + pos, write_entry[0])
-  line_buffer[pos] := ":"
-  pos += 1
-  pos += util.encode_hex_byte(@line_buffer + pos, mux)
-  line_buffer[pos] := ":"
-  pos += 1
+  value := write_entry[0] >> 8
   pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
-  line_buffer[pos] := 13
-  line_buffer[pos + 1] := 10
-  pos += 2
+  ' line_buffer[pos] := ":"
+  ' pos += 1
+  pos += util.encode_hex_byte(@line_buffer + pos, mux)
+  ' line_buffer[pos] := ":"
+  ' pos += 1
+  value := write_entry[1] & $ffffff
+  pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
+  line_buffer[pos] := 10
+  'line_buffer[pos + 1] := 10
+  pos += 1
   line_buffer[pos] := 0
-  fat.writeData(@line_buffer, pos)
-  if err <> 0
+  err := fat.writeData(@line_buffer, pos)
+  if err <> pos
     debug(zstr(string("writeData:error")))
     debug(zstr(err))
+    pinhigh(SD_STATUS_PIN)
   return pos
 
 pri find_last_file_index() : result | name, h
@@ -131,7 +137,7 @@ pri find_last_file_index() : result | name, h
     name := fat.listName()
     if strsize(name) == 0
       quit
-    if strsize(name) == 12 and startswith(string("RQADS"), name) and !endswith(string("~1.DAT"), name)
+    if strsize(name) == 12 and util.startswith(string("RQADS"), name) and !util.endswith(string("~1.DAT"), name)
       h := util.decode_hex_nibbles(name + 5, 3)
       debug(zstr(string("found RQADSXXX.DAT")))
       debug(zstr(name))
@@ -139,14 +145,3 @@ pri find_last_file_index() : result | name, h
       result #>= h
   result &= $fff
 
-pri startswith(prefix, s) : result | i, size
-  size := strsize(prefix)
-  result := TRUE
-  repeat i from 0 to size - 1
-    result &= BYTE[prefix][i] == BYTE[s][i]
-
-pri endswith(suffix, s) : result | offset
-  result := FALSE
-  offset := strsize(s) - strsize(suffix)
-  if offset > 0
-    return startswith(suffix, s + offset)
