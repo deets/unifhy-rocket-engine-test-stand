@@ -1,5 +1,5 @@
 con
-  _clkfreq = 160_000_000
+  _clkfreq = 300_000_000
 
   ' A propplug on a header
   RX0     = 35
