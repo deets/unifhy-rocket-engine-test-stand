@@ -88,6 +88,8 @@ CON
     } Directory_Link_Missing, Directory_Not_Empty, {
     } Not_A_Directory, Not_A_File, Not_Implemented, Invalid_Call
 
+  FAT_BLK_W = 12
+
 VAR long dataStructureAddress[0] 'note when cleared long[182] is used but it's long[186]+[4]
 
   long fileSystemType, countOfClusters, freeClusterCount, nextFreeCluster
@@ -2041,11 +2043,17 @@ PRI readWriteBlock(address, command) : result
 '  Print.Str(string(13,10))
 
   case command
+    "W": pinhigh(FAT_BLK_W)
+
+  case command
     "R": cardErrorFlag := sdspi.readBlock(cardSectorAddress, cardBlockAddress)
     "W": cardErrorFlag := sdspi.writeBlock(cardSectorAddress, cardBlockAddress)
     "M": cardErrorFlag := sdspi.mountCard()
     "O": 'cardErrorFlag := sdspi.release()
     other: abortError(Invalid_Call)
+
+  case command
+    "W": pinlow(FAT_BLK_W)
 
   if(cardErrorFlag~ < 0)
       abortError(Disk_IO_Error)
