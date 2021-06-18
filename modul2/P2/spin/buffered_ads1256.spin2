@@ -149,6 +149,10 @@ pri cdac(mux_buffer_address, mux_buffer_size) | last_mux, buf_pos, now, value
 
 pri store(timestamp, mux, value) | wpos
   wpos := LONG[output_buffer_address][1]
+  ' We never allow for 0 to be a timestamp. This
+  ' way we can use it as sentinel value.
+  if timestamp == 0
+    timestamp := 1
   'term.fstr1(string("ICDAC wpos %8.8x\r\n"), wpos)
   ' the +2 skips read/write, the << 1 takes care
   ' of the two-long data entry we are dealing with
