@@ -2,6 +2,7 @@
 import serial
 import pytest
 import operator
+import time
 from functools import reduce
 
 PORT = "/dev/serial/by-id/usb-FTDI_USB__-__Serial-if00-port0"
@@ -41,11 +42,22 @@ def test_thinning(conn):
 
 
 def test_cdac(conn):
+    duration = 5
+    repititions = 1
+
     #conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
-    conn.write(rqads("R:F0"))   # 0b11110000, 30K SPS
-    conn.write(rqads("T:FF"))  # maximum thinning,
-    conn.write(rqads("C2:08:18"))  # channel 0, single-sided
-    for _ in range(500):
-        print(conn.readline())
-    # just for termination
-    conn.write(rqads("P"))
+    #conn.write(rqads("R:A1"))   # 0b10100001, 1K SPS
+    #conn.write(rqads("R:C0"))   # 0b11000000, 3.750 SPS
+    conn.write(rqads("R:D0"))   # 0b11010000, 7500 SPS
+    #conn.write(rqads("R:E0"))   # 0b11100000, 15K SPS
+    #conn.write(rqads("R:F0"))   # 0b11110000, 30K SPS
+    conn.write(rqads("T:FF"))  # thinning highest
+    #conn.write(rqads("T:01"))  # thinning lowest
+    for _ in range(repititions):
+        then = time.monotonic()
+        conn.write(rqads("C1:08"))  # channel 0, single-sided
+        while time.monotonic() - then < duration:
+            print(conn.readline())
+        # for termination and to collect the stats
+        conn.write(rqads("S"))
+    print(conn.readline())
