@@ -44,7 +44,8 @@ var
   BYTE thinning
   BYTE mux_buffer[8]
   BYTE mux_buffer_length
-
+  ' Some statistical values from the last CDAC run
+  LONG total_samples, avg_timediff, max_timediff, max_sample
 obj
   adc: "buffered_ads1256"
   serial: "jm_fullduplexserial"
@@ -111,51 +112,43 @@ pri rq_process() : result | payload_length
     "R" : result := rq_rate(payload_length)
     "T" : result := rq_thinning(payload_length)
     "C" : result := rq_cdac(payload_length)
+    "S" : result := rq_stats(payload_length)
 
 pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   ' A cdac command looks like
   ' C<N>:XY{N}
   ' where N is the number of mux-instructions
   ' that must be in 1..8 and then N mux-instructions
-  debug(zstr(string("rq_cdac")))
   if payload_length < 5 ' RN:XY
-    debug(zstr(string("cdac minimal length violation")))
     return FALSE
   payload_offset := 1
   buffer_offset := 0
   mux_buffer_length := util.decode_nibble(payload[payload_offset])
   if mux_buffer_length < 0 and mux_buffer_length > 8
-    debug(zstr(string("cdac mux length violation")))
     return FALSE
-  debug(zstr(string("cdac mux")))
-  debug(udec(mux_buffer_length))
   payload_offset += 1 ' skip N
   ' we must have :XY worth mux_buffer_length
   if payload_offset + 3 * mux_buffer_length > payload_length
-    debug(zstr(string("cdac payload length violation")))
-    debug(udec(payload_length))
-    debug(udec(payload_offset + (3 * mux_buffer_length)))
     return FALSE
-  debug(zstr(string("mux")))
-  debug(udec(mux_buffer_length))
 
   repeat buffer_offset from 0 to mux_buffer_length - 1
     payload_offset += 1 ' skip :
     mux_buffer[buffer_offset] := util.decode_hex_byte(@payload + payload_offset)
     payload_offset += 2 ' skip XY
-    debug(zstr(string("mux")))
-    debug(udec(buffer_offset))
-    debug(uhex_byte(mux_buffer[buffer_offset]))
 
   do_cdac()
   return TRUE
 
-pri do_cdac() | mux, timestamp, value, thinning_count
+pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
   sdwriter.begin()
   adc.start_continuous_read(@mux_buffer, mux_buffer_length)
   thinning_count := 0
   serial_output_buffer_pos := 0
-
+  last_timestamp := 0
+  max_timediff := 0
+  total_samples := 0
+  max_sample := 0
+  avg_timediff := 40040 ' hard-coded 7500
   repeat
     ' we always want to send all mux values,
     ' thinning applies to full sets of values
@@ -166,17 +159,12 @@ pri do_cdac() | mux, timestamp, value, thinning_count
           adc.stop_continuous_read()
           ' TODO: consume the rest of the buffer before
           ' closing down
-          sdwriter.end()
+          sdwriter.end(total_samples, avg_timediff, max_timediff, max_sample)
           return
       timestamp, mux, value := adc.read_continuous()
       sdwriter.feed(timestamp, mux, value)
       if thinning == 0 or thinning_count == 0
         thinning_count := thinning
-        ' debug(zstr(string("----")))
-        ' debug(uhex(timestamp))
-        ' debug(uhex_byte(mux))
-        ' debug(uhex_long(value))
-
         rq_send_str(string("C"))
         rq_send_hex_long(timestamp)
         rq_send_hex_byte(mux)
@@ -185,34 +173,51 @@ pri do_cdac() | mux, timestamp, value, thinning_count
 
       thinning_count -= 1
 
+      total_samples += 1
+      if total_samples > 1000
+        if last_timestamp <> 0
+          timediff := util.timediff(last_timestamp, timestamp)
+          if max_timediff < timediff
+            max_timediff #>= timediff
+            max_sample := total_samples
+          avg_timediff := (avg_timediff + timediff) >> 1
+      last_timestamp := timestamp
+
+
 pri rq_rate(payload_length) : result | rate
-  debug(zstr(string("rq_rate")))
   if payload_length <> 4 ' R:XY
     return FALSE
   if payload[1] <> ":"
     return FALSE
   rate := util.decode_hex_byte(@payload + 2) ' read the hex number directly after R:
   adc.wreg(adc.RDRATE, rate)
-  debug(uhex_byte(rate))
   rq_send_str(string("R"))
   return TRUE
 
 pri rq_thinning(payload_length) : result | rate
-  debug(zstr(string("rq_thinning")))
   if payload_length <> 4 ' T:XY
     return FALSE
   if payload[1] <> ":"
     return FALSE
   thinning := util.decode_hex_byte(@payload + 2) ' read the hex number directly after R:
-  debug(uhex_byte(thinning))
   rq_send_str(string("T"))
   return TRUE
 
 pri rq_ping(payload_length) : result
-  debug(zstr(string("rq_ping")))
   if payload_length <> 1
     return FALSE
   rq_send_str(string("P"))
+  return TRUE
+
+pri rq_stats(payload_length) : result
+  debug("rq_stats:", udec(max_timediff), udec(max_sample), udec(total_samples), udec(avg_timediff))
+  if payload_length <> 1
+    return FALSE
+  rq_send_str(string("X"))
+  rq_send_hex_long(total_samples)
+  rq_send_hex_long(avg_timediff)
+  rq_send_hex_long(max_timediff)
+  rq_send_hex_long(max_sample)
   return TRUE
 
 pri rq_finalize(length) | checksum, i
