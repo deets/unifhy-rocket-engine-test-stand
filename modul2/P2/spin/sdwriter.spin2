@@ -8,7 +8,7 @@ con
   LINE_SIZE = 20 '<8>:<2>:<6>\r\n
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
   BUFFER_CAPACITY = 50000
-  FLUSH_AFTER_BYTES = 4096
+  FLUSH_AFTER_BYTES = 512
 
   SD_STATUS_PIN = 25
 
