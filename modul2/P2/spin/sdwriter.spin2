@@ -21,6 +21,8 @@ var
   long entry[2]
   byte line_buffer[LINE_SIZE]
   long write_entry[2]
+  long byte_counter
+  long total_samples, avg_timediff, max_timediff, max_sample
 obj
   fat: "FAT32"
   util: "util"
@@ -57,10 +59,11 @@ pub begin()
   cogatn(1 << cog)
   waitatn()
 
-pub end()
+pub end(total_samples_, avg_timediff_, max_timediff_, max_sample_)
   ' we don't need a command, begin
   ' put us into a loop that we
   ' leave using atn
+  bytemove(@total_samples, @total_samples_, 4 * 4)
   cogatn(1 << cog)
   waitatn()
 
@@ -76,7 +79,7 @@ pri mainloop()
       "b" : sync_cmd_begin()
     cmd := "0"
 
-pri sync_cmd_begin() | success, byte_counter
+pri sync_cmd_begin() | success
   debug(zstr(string("sync_cmd_begin")))
   bytemove(@filename, string("RQADSXXX.DAT"), 12)
   filename[12] := 0
@@ -94,29 +97,34 @@ pri sync_cmd_begin() | success, byte_counter
 
   byte_counter := 0
   repeat until pollatn() == -1
-    repeat while rb.available()
-      byte_counter += write_line()
-      if byte_counter >= FLUSH_AFTER_BYTES
-        fat.flushData()
-        byte_counter := 0
+    write_buffer()
   ' cleanup and signal the end call
-  repeat while rb.available()
-    write_line()
+  write_buffer()
+  write_statistics_line()
   fat.flushData()
   fat.closeFile()
   cogatn(1 << caller_cog)
 
+pri write_buffer()
+  repeat while rb.available()
+    byte_counter += write_line()
+    if byte_counter >= FLUSH_AFTER_BYTES
+      fat.flushData()
+      byte_counter := 0
+
 pri write_line(): result | mux, value, pos, err
   rb.fetch(@write_entry)
   mux := write_entry[1] >> 24
-  pos := 0
-  value := write_entry[0] >> 8
-  pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
-  ' line_buffer[pos] := ":"
-  ' pos += 1
+  line_buffer[0] := "D"
+  line_buffer[1] := ":"
+  pos := 2
+  value := write_entry[0]
+  pos += util.encode_hex_nibbles(@line_buffer + pos, value, 8)
+  line_buffer[pos] := ":"
+  pos += 1
   pos += util.encode_hex_byte(@line_buffer + pos, mux)
-  ' line_buffer[pos] := ":"
-  ' pos += 1
+  line_buffer[pos] := ":"
+  pos += 1
   value := write_entry[1] & $ffffff
   pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
   line_buffer[pos] := 10
@@ -125,9 +133,31 @@ pri write_line(): result | mux, value, pos, err
   line_buffer[pos] := 0
   err := fat.writeData(@line_buffer, pos)
   if err <> pos
-    debug(zstr(string("writeData:error")))
-    debug(zstr(err))
+    debug("writeData:error", zstr(err))
     pinhigh(SD_STATUS_PIN)
+  return pos
+
+pri write_statistics_line(): result | pos
+  ' write statistics line
+  pos := 0
+  line_buffer[0] := "S"
+  line_buffer[1] := ":"
+  pos := 2
+
+  pos += util.encode_hex_nibbles(@line_buffer + pos, total_samples, 8)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_nibbles(@line_buffer + pos, avg_timediff, 8)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_nibbles(@line_buffer + pos, max_timediff, 8)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_nibbles(@line_buffer + pos, max_sample, 8)
+
+  line_buffer[pos] := 10 ' nl
+  pos += 1
+  fat.writeData(@line_buffer, pos)
   return pos
 
 pri find_last_file_index() : result | name, h
@@ -139,9 +169,7 @@ pri find_last_file_index() : result | name, h
       quit
     if strsize(name) == 12 and util.startswith(string("RQADS"), name) and !util.endswith(string("~1.DAT"), name)
       h := util.decode_hex_nibbles(name + 5, 3)
-      debug(zstr(string("found RQADSXXX.DAT")))
-      debug(zstr(name))
-      debug(udec(fat.listSize()))
+      debug("found RQADSXXX.DAT", zstr(name), udec(fat.listSize()))
       result #>= h
   result &= $fff
 
