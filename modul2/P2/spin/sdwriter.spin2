@@ -13,7 +13,7 @@ con
   SD_STATUS_PIN = 25
 
 var
-  byte cmd, cog, caller_cog
+  byte cmd, cog, caller_cog, running
   word file_index
   byte filename[13]
   long stack[2048]
@@ -35,11 +35,13 @@ pub start() : result
   return cog + 1
 
 pri main(caller_cog_) | success
+  running := 0
   pinhigh(SD_STATUS_PIN)
   caller_cog := caller_cog_
   success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
   debug(zstr(string("fatenginestart:")))
   debug(udec(success))
+  cogatn(1 << caller_cog)
 
   debug(zstr(string("mount:")))
   success := \fat.mountPartition(0)
@@ -51,13 +53,15 @@ pri main(caller_cog_) | success
     debug(zstr(string("file_index")))
     debug(uhex_word(file_index))
     pinlow(SD_STATUS_PIN)
-  cogatn(1 << caller_cog)
+    running := 1
+
   mainloop()
 
 pub begin()
-  cmd := "b"
-  cogatn(1 << cog)
-  waitatn()
+  if running > 0
+    cmd := "b"
+    cogatn(1 << cog)
+    waitatn()
 
 pub end(total_samples_, avg_timediff_, max_timediff_, max_sample_)
   ' we don't need a command, begin
@@ -172,4 +176,3 @@ pri find_last_file_index() : result | name, h
       debug("found RQADSXXX.DAT", zstr(name), udec(fat.listSize()))
       result #>= h
   result &= $fff
-
