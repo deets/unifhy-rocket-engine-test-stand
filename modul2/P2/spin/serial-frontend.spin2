@@ -140,8 +140,6 @@ pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   return TRUE
 
 pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
-  sdwriter.begin()
-  adc.start_continuous_read(@mux_buffer, mux_buffer_length)
   thinning_count := 0
   serial_output_buffer_pos := 0
   last_timestamp := 0
@@ -150,6 +148,9 @@ pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
   max_sample := 0
   avg_timediff := adc.timediff_for_datarate()
   debug(udec(avg_timediff))
+
+  sdwriter.begin()
+  adc.start_continuous_read(@mux_buffer, mux_buffer_length)
   repeat
     ' we always want to send all mux values,
     ' thinning applies to full sets of values

@@ -52,8 +52,9 @@ pub read_single_sided(channel): result
   waitatn()
   return a
 
-pub timediff_for_datarate(): result
-  return adc.timediff_for_datarate()
+pub timediff_for_datarate(): result | d
+  d := rreg(RDRATE, 1)
+  return adc.timediff_for_datarate(d)
 
 pub start_continuous_read(mux_buffer_address, mux_buffer_size)
   ' The contents of mux_buffer_address

@@ -83,10 +83,8 @@ pub rdata(): result
   pinhigh(cs_pin)
   return result
 
-pub timediff_for_datarate(): result | h
-  h := rreg(DRATE, 1)
-  debug("DRATE: ", uhex_byte(h))
-  case h
+pub timediff_for_datarate(d): result
+  case d
     %00000011: return clkfreq * 2 / 5  ' 2.5SPS
     %00010011: return clkfreq / 5
     %00100011: return clkfreq / 10
