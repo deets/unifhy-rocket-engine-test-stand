@@ -83,6 +83,28 @@ pub rdata(): result
   pinhigh(cs_pin)
   return result
 
+pub timediff_for_datarate(): result | h
+  h := rreg(DRATE, 1)
+  debug("DRATE: ", uhex_byte(h))
+  case h
+    %00000011: return clkfreq * 2 / 5  ' 2.5SPS
+    %00010011: return clkfreq / 5
+    %00100011: return clkfreq / 10
+    %00110011: return clkfreq / 15
+    %01000011: return clkfreq / 25
+    %01010011: return clkfreq / 30
+    %01100011: return clkfreq / 50
+    %01110010: return clkfreq / 60
+    %10000010: return clkfreq / 100
+    %10010010: return clkfreq / 500
+    %10100001: return clkfreq / 1000
+    %10110000: return clkfreq / 2000
+    %11000000: return clkfreq / 3750
+    %11010000: return clkfreq / 7500
+    %11100000: return clkfreq / 15000
+    %11110000: return clkfreq / 30000
+  return 0
+
 pri reset()
   cmd($FE)
   waitus(100)

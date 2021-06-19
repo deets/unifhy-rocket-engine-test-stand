@@ -148,7 +148,8 @@ pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
   max_timediff := 0
   total_samples := 0
   max_sample := 0
-  avg_timediff := 40040 ' hard-coded 7500
+  avg_timediff := adc.timediff_for_datarate()
+  debug(udec(avg_timediff))
   repeat
     ' we always want to send all mux values,
     ' thinning applies to full sets of values
