@@ -77,7 +77,7 @@ pub main() | c, correct, success
             ifnot correct
               debug(zstr(string("incorrect command")))
             ' Send any lingering data
-            rq_finalize(serial_output_buffer_pos)
+            rq_finalize()
 
           reset_buffer()
 
@@ -172,7 +172,7 @@ pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
         rq_send_hex_long(timestamp)
         rq_send_hex_byte(mux)
         rq_send_hex_long(value)
-        rq_finalize(serial_output_buffer_pos)
+        rq_finalize()
 
       thinning_count -= 1
 
@@ -211,11 +211,9 @@ pri rq_list(payload_length) : result | file_index, file_size
     serial_output_buffer_pos += 3
     rq_send_str(string(":"))
     serial_output_buffer_pos += util.encode_hex_long(@serial_output_buffer + serial_output_buffer_pos, file_size)
-    rq_finalize(serial_output_buffer_pos)
-    reset_buffer()
+    rq_finalize()
     file_index, file_size := sdwriter.file_listing_next()
 
-  reset_buffer()
   rq_send_str(string("XXX"))
   return TRUE
 
@@ -245,18 +243,18 @@ pri rq_stats(payload_length) : result
   rq_send_hex_long(max_sample)
   return TRUE
 
-pri rq_finalize(length) | checksum, i
+pri rq_finalize() | checksum, i
   if serial_output_buffer_pos == 0
     return
 
   checksum := 0
-  repeat i from 1 to length + 5 ' the RQADS is included in the checksum!
+  repeat i from 1 to serial_output_buffer_pos + 5 ' the RQADS is included in the checksum!
     checksum ^= serial_output_preamble[i]
-  serial_output_buffer[length] := ASTERISK
-  serial_output_buffer[length + 1] := util.encode_nibble(checksum >> 4)
-  serial_output_buffer[length + 2] := util.encode_nibble(checksum & $f)
-  serial_output_buffer[length + 3] := 13 ' \r
-  serial_output_buffer[length + 4] := 10 ' \n
+  serial_output_buffer[serial_output_buffer_pos] := ASTERISK
+  serial_output_buffer[serial_output_buffer_pos + 1] := util.encode_nibble(checksum >> 4)
+  serial_output_buffer[serial_output_buffer_pos + 2] := util.encode_nibble(checksum & $f)
+  serial_output_buffer[serial_output_buffer_pos + 3] := 13 ' \r
+  serial_output_buffer[serial_output_buffer_pos + 4] := 10 ' \n
   serial.substr(@serial_output_preamble, 6 + 5 + serial_output_buffer_pos)
   serial_output_buffer_pos := 0
 
