@@ -24,7 +24,7 @@ var
   byte line_buffer[LINE_SIZE]
   long write_entry[2]
   long byte_counter
-  long enumeration_result, enumeration_size
+  long enumeration_result, enumeration_size, selected_file_index
   long total_samples, avg_timediff, max_timediff, max_sample
 obj
   fat: "FAT32"
@@ -96,13 +96,67 @@ pub file_listing_next(): result
   waitatn()
   return enumeration_result, enumeration_size
 
+pub prepare_to_stream(selected_file_index_): result
+  if running > 0
+    cmd := "s"
+    selected_file_index := selected_file_index_
+    cogatn(1 << cog)
+    waitatn()
+    return enumeration_size
+  return 0
+
+pub stream_buffer(address, size): result
+  enumeration_result := address
+  enumeration_size := size
+  cogatn(1 << cog)
+  waitatn()
+  return enumeration_result
+
 pri mainloop()
   repeat
     waitatn()
     case cmd
       "b" : sync_cmd_begin()
       "l" : sync_cmd_list()
-    cmd := "0"
+      "s" : sync_cmd_stream()
+    cmd := 0
+
+pri sync_cmd_stream() | index, name, read_bytes
+  debug("sync_cmd_stream:", udec(selected_file_index))
+  enumeration_size := 0
+  repeat
+    fat.listEntries("N")
+    name := fat.listName()
+    if strsize(name) == 0
+      quit
+    if strsize(name) == 12 and util.startswith(string("RQADS"), name) and !util.endswith(string("~1.DAT"), name)
+      index := util.decode_hex_nibbles(name + 5, 3)
+      if index == selected_file_index
+        enumeration_size := fat.listSize()
+        debug("sync_cmd_stream:enumeration_size:", udec(enumeration_size))
+        quit
+
+  ' notify the waiting caller
+  ' about the actual file size
+  cogatn(1 << caller_cog)
+  'debug("sync_cmd_stream:after")
+  if enumeration_size > 0
+    ' as we found a file, we open it and
+    ' expect stream_buffer to be called
+    fat.openFile(name, "R")
+    repeat
+      waitatn()
+      read_bytes := fat.readData(enumeration_result, enumeration_size)
+      'debug("sync_cmd_stream:read_bytes:", udec(read_bytes))
+      enumeration_result := read_bytes
+      cogatn(1 << caller_cog)
+      if read_bytes == 0
+        quit
+  ' final handshake
+  'debug("sync_cmd_stream:final_handshake")
+  waitatn()
+  enumeration_result := read_bytes
+  cogatn(1 << caller_cog)
 
 pri sync_cmd_list() | name
   repeat

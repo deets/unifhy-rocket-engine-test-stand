@@ -3,7 +3,6 @@ import serial
 import pytest
 import operator
 import time
-import threading
 import queue
 
 from functools import reduce, wraps
@@ -80,9 +79,6 @@ class SerialConnector:
         self._conn = serial.Serial(port, baud)
         self._lines = queue.Queue()
         self._read_callback = read_callback
-        self._t = threading.Thread(target=self._line_reader)
-        self._t.daemon = True
-        self._t.start()
 
     @command
     def ping(self):
@@ -109,17 +105,21 @@ class SerialConnector:
             res.append((index, size))
         return res
 
+    def download(self, file_index):
+        self._send(f"F:{file_index:03X}")
+        file_size = int(rqads_decode(self.readline()).split(b":")[1], 16)
+        if file_size:
+            print("file_size", file_size)
+            # Maybe do this block-wise
+            return self._conn.read(file_size)
+
     def readline(self):
-        return self._lines.get()
+        line = self._conn.readline()
+        self._read_callback(line)
+        return line
 
     def _send(self, message):
         self._conn.write(rqads_encode(message))
-
-    def _line_reader(self):
-        while True:
-            line = self._conn.readline()
-            self._read_callback(line)
-            self._lines.put(line)
 
 
 @pytest.fixture
@@ -147,6 +147,13 @@ def test_rate(conn):
 
 def test_file_listing(conn):
     assert conn.listfiles() == [(1, 10499408), (2, 10483784)]
+
+
+def test_download(conn):
+    index, _ = conn.listfiles()[0]
+    data = conn.download(index)
+    assert data is not None
+    print(data)
 
 
 def test_cdac(conn):

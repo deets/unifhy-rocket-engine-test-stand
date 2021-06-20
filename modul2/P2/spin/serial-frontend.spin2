@@ -108,12 +108,13 @@ pri rq_datagram() : result | p, wire_checksum, local_checksum
 pri rq_process() : result | payload_length
   payload_length := serial_input_buffer_pos - 6 - 5 ' remove $RQADS and *XX\r\n
   case payload[0]
-    "P" : result := rq_ping(payload_length)
-    "R" : result := rq_rate(payload_length)
-    "T" : result := rq_thinning(payload_length)
-    "C" : result := rq_cdac(payload_length)
-    "S" : result := rq_stats(payload_length)
-    "L" : result := rq_list(payload_length)
+    "P": result := rq_ping(payload_length)
+    "R": result := rq_rate(payload_length)
+    "T": result := rq_thinning(payload_length)
+    "C": result := rq_cdac(payload_length)
+    "S": result := rq_stats(payload_length)
+    "L": result := rq_list(payload_length)
+    "F": result := rq_stream_file(payload_length)
 
 pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   ' A cdac command looks like
@@ -196,6 +197,33 @@ pri rq_rate(payload_length) : result | rate
   adc.wreg(adc.RDRATE, rate)
   rq_send_str(string("R"))
   return TRUE
+
+pri rq_stream_file(payload_length) : result | file_index, file_size
+  debug("rq_stream_file:", udec(payload_length))
+  if payload_length <> 5 ' R:XXX
+    return FALSE
+  if payload[1] <> ":"
+    return FALSE
+  file_index := util.decode_hex_nibbles(@payload + 2, 3)
+  debug("rq_stream_file:", udec(file_index))
+  file_size := sdwriter.prepare_to_stream(file_index)
+  rq_send_str(string("F"))
+  rq_send_hex_long(file_size)
+  rq_finalize()
+  if file_size > 0
+    repeat
+      file_size := sdwriter.stream_buffer(@serial_output_buffer, SERIAL_BUFFER_SIZE)
+      debug("rq_stream_file:", udec(file_size))
+      if file_size == 0
+        quit
+      send_buffer(file_size)
+  debug("rq_stream_file:end")
+  reset_buffer()
+  return TRUE
+
+pri send_buffer(file_size) | i
+  repeat i from 0 to file_size - 1
+    serial.tx(serial_output_buffer[i])
 
 pri rq_list(payload_length) : result | file_index, file_size
   ' We send the indices of
