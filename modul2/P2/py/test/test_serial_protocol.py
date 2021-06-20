@@ -76,41 +76,54 @@ class SerialConnector:
         30000: 0b11110000,
     }
 
-    def __init__(self, port, baud):
+    def __init__(self, port, baud, read_callback=lambda x: None):
         self._conn = serial.Serial(port, baud)
         self._lines = queue.Queue()
+        self._read_callback = read_callback
         self._t = threading.Thread(target=self._line_reader)
         self._t.daemon = True
         self._t.start()
 
     @command
     def ping(self):
-        self._write("P")
+        self._send("P")
 
     @command
     def thinning(self, thinning):
         assert thinning in range(0, 256)
-        self._write(f"T:{thinning:02X}")
+        self._send(f"T:{thinning:02X}")
 
     @command
     def rate(self, samples_per_second):
         value = self.SAMPLE_SPEEDS[samples_per_second]
-        self._write(f"R:{value:02X}")
+        self._send(f"R:{value:02X}")
+
+    def listfiles(self):
+        res = []
+        self._send("L")
+        while True:
+            answer = rqads_decode(self.readline())
+            if answer == b"XXX":
+                break
+            res.append(answer)
+        return res
 
     def readline(self):
         return self._lines.get()
 
-    def _write(self, message):
+    def _send(self, message):
         self._conn.write(rqads_encode(message))
 
     def _line_reader(self):
         while True:
-            self._lines.put(self._conn.readline())
+            line = self._conn.readline()
+            self._read_callback(line)
+            self._lines.put(line)
 
 
 @pytest.fixture
 def conn():
-    conn = SerialConnector(PORT, BAUD)
+    conn = SerialConnector(PORT, BAUD, print)
     return conn
 
 
@@ -131,14 +144,18 @@ def test_rate(conn):
     assert conn.rate(7500) == b"R"
 
 
+def test_file_listing(conn):
+    assert conn.listfiles() == [b"001", b"002"]
+
+
 def test_cdac(conn):
-    duration = 5
-    repititions = 1
+    duration = 120
+    repititions = 3
 
     #conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
     #conn.write(rqads("R:A1"))   # 0b10100001, 1K SPS
     #conn.write(rqads("R:C0"))   # 0b11000000, 3.750 SPS
-    conn.write(rqads("R:D0"))   # 0b11010000, 7500 SPS
+    #conn.write(rqads("R:D0"))   # 0b11010000, 7500 SPS
     #conn.write(rqads("R:E0"))   # 0b11100000, 15K SPS
     #conn.write(rqads("R:F0"))   # 0b11110000, 30K SPS
     conn.write(rqads("T:FF"))  # thinning highest
@@ -150,4 +167,4 @@ def test_cdac(conn):
             print(conn.readline())
         # for termination and to collect the stats
         conn.write(rqads("S"))
-    print(conn.readline())
+        print(conn.readline())

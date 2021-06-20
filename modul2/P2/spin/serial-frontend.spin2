@@ -113,6 +113,7 @@ pri rq_process() : result | payload_length
     "T" : result := rq_thinning(payload_length)
     "C" : result := rq_cdac(payload_length)
     "S" : result := rq_stats(payload_length)
+    "L" : result := rq_list(payload_length)
 
 pri rq_cdac(payload_length) : result | payload_offset, buffer_offset
   ' A cdac command looks like
@@ -194,6 +195,26 @@ pri rq_rate(payload_length) : result | rate
   rate := util.decode_hex_byte(@payload + 2) ' read the hex number directly after R:
   adc.wreg(adc.RDRATE, rate)
   rq_send_str(string("R"))
+  return TRUE
+
+pri rq_list(payload_length) : result | file_index
+  ' We send the indices of
+  ' matching files in hex 3 form
+  ' until we notifiy the client
+  ' with XXX
+  if payload_length <> 1
+    return FALSE
+  file_index := sdwriter.file_listing_start()
+  repeat until file_index == sdwriter.FILE_LIST_END
+    debug("rq_list:", uhex(file_index))
+    util.encode_hex_nibbles(@serial_output_buffer + serial_output_buffer_pos, file_index, 3)
+    serial_output_buffer_pos += 3
+    rq_finalize(serial_output_buffer_pos)
+    reset_buffer()
+    file_index := sdwriter.file_listing_next()
+
+  reset_buffer()
+  rq_send_str(string("XXX"))
   return TRUE
 
 pri rq_thinning(payload_length) : result | rate

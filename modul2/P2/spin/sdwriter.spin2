@@ -12,6 +12,8 @@ con
 
   SD_STATUS_PIN = 25
 
+  FILE_LIST_END = $ffffffff
+
 var
   byte cmd, cog, caller_cog, running
   word file_index
@@ -22,6 +24,7 @@ var
   byte line_buffer[LINE_SIZE]
   long write_entry[2]
   long byte_counter
+  long enumeration_result
   long total_samples, avg_timediff, max_timediff, max_sample
 obj
   fat: "FAT32"
@@ -76,12 +79,45 @@ pub feed(timestamp, mux, value)
   entry[1] := mux << 24 | value & $00ffffff
   rb.store(@entry)
 
+pub file_listing_start(): result
+  debug(zstr(string("enumerate_file")))
+  if running > 0
+    cmd := "l"
+    cogatn(1 << cog)
+    waitatn()
+    return enumeration_result
+  else
+    return FILE_LIST_END
+
+pub file_listing_next(): result
+  ' signal the sync_cmd_list loop that
+  ' it should get the next name
+  cogatn(1 << cog)
+  waitatn()
+  return enumeration_result
+
 pri mainloop()
   repeat
     waitatn()
     case cmd
       "b" : sync_cmd_begin()
+      "l" : sync_cmd_list()
     cmd := "0"
+
+pri sync_cmd_list() | name
+  repeat
+    fat.listEntries("N")
+    name := fat.listName()
+    if strsize(name) == 0
+      quit
+    if strsize(name) == 12 and util.startswith(string("RQADS"), name) and !util.endswith(string("~1.DAT"), name)
+      enumeration_result := util.decode_hex_nibbles(name + 5, 3)
+      cogatn(1 << caller_cog)
+      waitatn()
+
+  enumeration_result := FILE_LIST_END
+  debug("sync_cmd_list", uhex(enumeration_result))
+  cogatn(1 << caller_cog)
 
 pri sync_cmd_begin() | success
   debug(zstr(string("sync_cmd_begin")))
