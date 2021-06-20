@@ -5,10 +5,14 @@ import operator
 import time
 import queue
 
+from collections import namedtuple
 from functools import reduce, wraps
 
 PORT = "/dev/serial/by-id/usb-FTDI_USB__-__Serial-if00-port0"
 BAUD = 115200
+
+
+RunStats = namedtuple("RunStats", "total_samples avg_timediff max_timediff max_sample")
 
 
 class ProtocoViolation(Exception):
@@ -94,6 +98,26 @@ class SerialConnector:
         value = self.SAMPLE_SPEEDS[samples_per_second]
         self._send(f"R:{value:02X}")
 
+    def start_data_acquisition(self, muxes):
+        mux_expression = ":".join(f"{mux:02X}" for mux in muxes)
+        self._send(f"C{len(muxes)}:{mux_expression}")
+
+    def stop_data_acquisition(self):
+        self._send("S")
+        while True:
+            # possibly read away buffered lines
+            line = rqads_decode(self.readline())
+            if line.startswith(b"X"):
+                total_samples, avg_timediff, max_timediff, max_sample = [
+                    int(p, 16) for p in line.split(b":")[1:]
+                ]
+                return RunStats(
+                    total_samples,
+                    avg_timediff,
+                    max_timediff,
+                    max_sample,
+                )
+
     def listfiles(self):
         res = []
         self._send("L")
@@ -157,22 +181,14 @@ def test_download(conn):
 
 
 def test_cdac(conn):
-    duration = 120
+    duration = 10
     repititions = 3
-
-    #conn.write(rqads("R:03"))   # 0b00000011, 2.5 SPS
-    #conn.write(rqads("R:A1"))   # 0b10100001, 1K SPS
-    #conn.write(rqads("R:C0"))   # 0b11000000, 3.750 SPS
-    #conn.write(rqads("R:D0"))   # 0b11010000, 7500 SPS
-    #conn.write(rqads("R:E0"))   # 0b11100000, 15K SPS
-    #conn.write(rqads("R:F0"))   # 0b11110000, 30K SPS
-    conn.write(rqads("T:FF"))  # thinning highest
-    #conn.write(rqads("T:01"))  # thinning lowest
+    conn.thinning(1)
+    conn.rate(2.5)
     for _ in range(repititions):
         then = time.monotonic()
-        conn.write(rqads("C1:08"))  # channel 0, single-sided
+        conn.start_data_acquisition([0x08])
         while time.monotonic() - then < duration:
             print(conn.readline())
         # for termination and to collect the stats
-        conn.write(rqads("S"))
-        print(conn.readline())
+        print(conn.stop_data_acquisition())
