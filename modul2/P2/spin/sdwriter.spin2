@@ -24,7 +24,7 @@ var
   byte line_buffer[LINE_SIZE]
   long write_entry[2]
   long byte_counter
-  long enumeration_result
+  long enumeration_result, enumeration_size
   long total_samples, avg_timediff, max_timediff, max_sample
 obj
   fat: "FAT32"
@@ -85,7 +85,7 @@ pub file_listing_start(): result
     cmd := "l"
     cogatn(1 << cog)
     waitatn()
-    return enumeration_result
+    return enumeration_result, enumeration_size
   else
     return FILE_LIST_END
 
@@ -94,7 +94,7 @@ pub file_listing_next(): result
   ' it should get the next name
   cogatn(1 << cog)
   waitatn()
-  return enumeration_result
+  return enumeration_result, enumeration_size
 
 pri mainloop()
   repeat
@@ -112,6 +112,7 @@ pri sync_cmd_list() | name
       quit
     if strsize(name) == 12 and util.startswith(string("RQADS"), name) and !util.endswith(string("~1.DAT"), name)
       enumeration_result := util.decode_hex_nibbles(name + 5, 3)
+      enumeration_size := fat.listSize()
       cogatn(1 << caller_cog)
       waitatn()
 

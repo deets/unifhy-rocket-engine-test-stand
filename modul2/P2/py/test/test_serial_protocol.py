@@ -105,7 +105,8 @@ class SerialConnector:
             answer = rqads_decode(self.readline())
             if answer == b"XXX":
                 break
-            res.append(answer)
+            index, size = [int(part, 16) for part in answer.split(b":")]
+            res.append((index, size))
         return res
 
     def readline(self):
@@ -145,7 +146,7 @@ def test_rate(conn):
 
 
 def test_file_listing(conn):
-    assert conn.listfiles() == [b"001", b"002"]
+    assert conn.listfiles() == [(1, 10499408), (2, 10483784)]
 
 
 def test_cdac(conn):

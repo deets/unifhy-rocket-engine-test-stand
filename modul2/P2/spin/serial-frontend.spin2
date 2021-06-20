@@ -197,21 +197,23 @@ pri rq_rate(payload_length) : result | rate
   rq_send_str(string("R"))
   return TRUE
 
-pri rq_list(payload_length) : result | file_index
+pri rq_list(payload_length) : result | file_index, file_size
   ' We send the indices of
   ' matching files in hex 3 form
   ' until we notifiy the client
   ' with XXX
   if payload_length <> 1
     return FALSE
-  file_index := sdwriter.file_listing_start()
+  file_index, file_size := sdwriter.file_listing_start()
   repeat until file_index == sdwriter.FILE_LIST_END
-    debug("rq_list:", uhex(file_index))
+    debug("rq_list:", uhex(file_index), udec(file_size))
     util.encode_hex_nibbles(@serial_output_buffer + serial_output_buffer_pos, file_index, 3)
     serial_output_buffer_pos += 3
+    rq_send_str(string(":"))
+    serial_output_buffer_pos += util.encode_hex_long(@serial_output_buffer + serial_output_buffer_pos, file_size)
     rq_finalize(serial_output_buffer_pos)
     reset_buffer()
-    file_index := sdwriter.file_listing_next()
+    file_index, file_size := sdwriter.file_listing_next()
 
   reset_buffer()
   rq_send_str(string("XXX"))
