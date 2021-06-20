@@ -233,7 +233,7 @@ pri rq_ping(payload_length) : result
   return TRUE
 
 pri rq_stats(payload_length) : result
-  debug("rq_stats:", udec(max_timediff), udec(max_sample), udec(total_samples), udec(avg_timediff))
+  debug("rq_stats:", udec(total_samples), udec(avg_timediff), udec(max_timediff), udec(max_sample))
   if payload_length <> 1
     return FALSE
   rq_send_str(string("X"))
