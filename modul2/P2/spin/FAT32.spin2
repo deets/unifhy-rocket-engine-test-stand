@@ -748,7 +748,7 @@ PUB listName() : result
 
   result := evaluateName(@directoryEntryCache)
 
-PUB listSize() : result
+PUB listSize() : result | h
 
 '' ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 '' // Returns the size in bytes of the entry pointed to by the listing methods. Directories have zero size.
@@ -757,9 +757,13 @@ PUB listSize() : result
 '' //
 '' // If an unrecoverable error occurred the value returned is invalid.
 '' ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
   bytemove(@result, @directoryEntryCache[28], 4)
   if(result < 0)
+    ' ERROR: This needs to be commented in
+    ' to produces the actual file size?
+    'debug("result < 0:", posx)
+    ' h := 2
+    ' h *= 10
     result := posx
 
 PUB listCreationDay() : result
