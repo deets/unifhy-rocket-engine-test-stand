@@ -9,7 +9,7 @@ from collections import namedtuple
 from functools import reduce, wraps
 
 PORT = "/dev/serial/by-id/usb-FTDI_USB__-__Serial-if00-port0"
-BAUD = 115200
+BAUD = 1_000_000
 
 
 RunStats = namedtuple("RunStats", "total_samples avg_timediff max_timediff max_sample")

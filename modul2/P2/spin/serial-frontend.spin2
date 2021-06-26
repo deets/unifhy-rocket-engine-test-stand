@@ -4,7 +4,7 @@ con
   ' A propplug on a header
   RX0     = 35
   TX0     = 37
-  BR_SERIAL = 115200
+  BR_SERIAL = 1_000_000
 
   DEBUG_BAUD  = 230_400
   DEBUG_COGS = %11111110
