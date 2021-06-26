@@ -6,8 +6,6 @@ con
   SD_CLK = 61
 
   LINE_SIZE = 20 '<8>:<2>:<6>\r\n
-  DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 50000
   FLUSH_AFTER_BYTES = 512
 
   SD_STATUS_PIN = 25
@@ -19,20 +17,23 @@ var
   word file_index
   byte filename[13]
   long stack[2048]
-  long buffer[DATAGRAM_SIZE / 4 * BUFFER_CAPACITY]
   long entry[2]
   byte line_buffer[LINE_SIZE]
   long write_entry[2]
   long byte_counter
   long enumeration_result, enumeration_size, selected_file_index
   long total_samples, avg_timediff, max_timediff, max_sample
+
+  ' buffer callbacks
+  long store, available, fetch
 obj
   fat: "FAT32"
   util: "util"
-  rb: "ringbuffer"
 
-pub start() : result
-  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @buffer)
+pub start(store_, available_, fetch_) : result
+  store := store_
+  available := available_
+  fetch := fetch_
   cog := cogspin(NEWCOG, main(cogid()), @stack)
   waitatn()
   return cog + 1
@@ -77,7 +78,7 @@ pub end(total_samples_, avg_timediff_, max_timediff_, max_sample_)
 pub feed(timestamp, mux, value)
   entry[0] := timestamp
   entry[1] := mux << 24 | value & $00ffffff
-  rb.store(@entry)
+  store(@entry)
 
 pub file_listing_start(): result
   debug(zstr(string("enumerate_file")))
@@ -200,15 +201,15 @@ pri sync_cmd_begin() | success
   fat.closeFile()
   cogatn(1 << caller_cog)
 
-pri write_buffer()
-  repeat while rb.available()
+pri write_buffer() | h
+  repeat while available()
     byte_counter += write_line()
     if byte_counter >= FLUSH_AFTER_BYTES
       fat.flushData()
       byte_counter := 0
 
 pri write_line(): result | mux, value, pos, err
-  rb.fetch(@write_entry)
+  fetch(@write_entry)
   mux := write_entry[1] >> 24
   line_buffer[0] := "D"
   line_buffer[1] := ":"
