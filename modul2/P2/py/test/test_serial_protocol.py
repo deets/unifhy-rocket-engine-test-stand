@@ -4,6 +4,7 @@ import pytest
 import operator
 import time
 import queue
+import pathlib
 
 from collections import namedtuple
 from functools import reduce, wraps
@@ -170,21 +171,22 @@ def test_rate(conn):
 
 
 def test_file_listing(conn):
-    assert conn.listfiles() == [(1, 10499408), (2, 10483784)]
+    res = conn.listfiles()
+    print(res)
 
 
 def test_download(conn):
-    index, _ = conn.listfiles()[0]
+    index, _ = conn.listfiles()[1]
     data = conn.download(index)
     assert data is not None
     print(data)
 
 
-def test_cdac(conn):
-    duration = 10
-    repititions = 3
+def test_only_cdac(conn):
+    duration = 5
+    repititions = 1
     conn.thinning(1)
-    conn.rate(2.5)
+    conn.rate(1000)
     for _ in range(repititions):
         then = time.monotonic()
         conn.start_data_acquisition([0x08])
@@ -192,3 +194,21 @@ def test_cdac(conn):
             print(conn.readline())
         # for termination and to collect the stats
         print(conn.stop_data_acquisition())
+
+
+def test_cdac_and_download(conn):
+    duration = 10
+    old_file_list = set(conn.listfiles())
+    conn.thinning(255)
+    conn.rate(1000)
+    then = time.monotonic()
+    conn.start_data_acquisition([0x08])
+    while time.monotonic() - then < duration:
+        print(conn.readline())
+    # for termination and to collect the stats
+    print(conn.stop_data_acquisition())
+    new_file_list = set(conn.listfiles())
+    latest_file = next(iter(new_file_list - old_file_list))
+    print(latest_file)
+    data = conn.download(latest_file[0])
+    pathlib.Path("/tmp/latest-data.log").write_bytes(data)
