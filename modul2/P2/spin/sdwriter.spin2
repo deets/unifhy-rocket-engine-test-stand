@@ -26,6 +26,8 @@ var
 
   ' buffer callbacks
   long store, available, fetch
+  ' wuergaround
+  long signal
 obj
   fat: "FAT32"
   util: "util"
@@ -68,12 +70,15 @@ pub begin()
     waitatn()
 
 pub end(total_samples_, avg_timediff_, max_timediff_, max_sample_)
-  ' we don't need a command, begin
-  ' put us into a loop that we
-  ' leave using atn
-  bytemove(@total_samples, @total_samples_, 4 * 4)
-  cogatn(1 << cog)
-  waitatn()
+  ' we don't need a command, begin has
+  ' put cog into a loop that we leave using atn
+  if running > 0
+    longmove(@total_samples, @total_samples_, 4)
+    signal := 0
+    cogatn(1 << cog)
+    waitatn()
+    repeat until signal <> 0
+    debug("sdwriter:end")
 
 pub feed(timestamp, mux, value)
   entry[0] := timestamp
@@ -184,29 +189,28 @@ pri sync_cmd_begin() | success
   debug(zstr(@filename))
   success := \fat.newFile(@filename)
   if success <> 0
-    debug(zstr(string("fat.newFile:error")))
-    debug(zstr(success))
+    debug("fat.newFile:error", zstr(success))
   fat.openFile(@filename, "W")
-  debug(zstr(string("fat.newFile")))
-  debug(udec(result))
+  debug("fat.newFile", udec(result))
   cogatn(1 << caller_cog)
 
   byte_counter := 0
   repeat until pollatn() == -1
     write_buffer()
   ' cleanup and signal the end call
-  write_buffer()
+  repeat while available()
+    write_buffer()
   write_statistics_line()
   fat.flushData()
   fat.closeFile()
   cogatn(1 << caller_cog)
+  signal := 1
 
-pri write_buffer() | h
-  repeat while available()
-    byte_counter += write_line()
-    if byte_counter >= FLUSH_AFTER_BYTES
-      fat.flushData()
-      byte_counter := 0
+pri write_buffer()
+  byte_counter += write_line()
+  if byte_counter >= FLUSH_AFTER_BYTES
+    fat.flushData()
+    byte_counter := 0
 
 pri write_line(): result | mux, value, pos, err
   fetch(@write_entry)
