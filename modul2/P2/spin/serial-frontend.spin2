@@ -31,7 +31,7 @@ con
   SD_CLK = 61
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 50000
+  BUFFER_CAPACITY = 16_000_000 / DATAGRAM_SIZE
 
 var
   BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
@@ -50,19 +50,17 @@ var
   ' Some statistical values from the last CDAC run
   LONG total_samples, avg_timediff, max_timediff, max_sample
 
-  long sd_buffer[DATAGRAM_SIZE / 4 * BUFFER_CAPACITY]
-
 obj
   adc: "buffered_ads1256"
   serial: "jm_fullduplexserial"
   sdwriter: "sdwriter"
   util: "util"
-  rb: "ringbuffer"
+  rb: "hyper_ringbuffer"
 
 pub main() | c, correct, success
   bytemove(@serial_output_preamble, string("$RQADS"), 6)
 
-  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @sd_buffer)
+  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
 
   serial_output_buffer_pos := 0
   thinning := 255
