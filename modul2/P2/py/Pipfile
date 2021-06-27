@@ -8,6 +8,8 @@ pytest = "*"
 
 [packages]
 pyserial = "*"
+plotly = "*"
+numpy = "*"
 
 [requires]
 python_version = "3.8"
