@@ -1,0 +1,51 @@
+con
+  _clkfreq = 300_000_000
+
+  BASE  = 0
+  RAM   = $10_000000
+  FLASH = -1
+
+  ' set these to 1 or 0 to experiment
+  FASTREAD  = 0
+  FASTWRITE = 0
+  UNREGCLK  = 0
+  ' startup flags for driver
+  FLAGS = (FASTREAD ? mem.F_FASTREAD : 0) | (FASTWRITE ?  mem.F_FASTWRITE : 0) | (UNREGCLK ? mem.F_UNREGCLK : 0)
+
+var
+  long bus
+  long read_pos
+  long write_pos
+  long datagram_size
+  long capacity ' in datagram_size
+
+obj
+  mem: "memory"
+
+pub init(datagram_size_, capacity_, buffer_address)
+  datagram_size := datagram_size_
+  capacity := capacity_
+  read_pos := 0
+  write_pos := 0
+  bus := mem.initHyperDriver(BASE,    RAM,     FLASH,     FLAGS, clkfreq, -1)
+  if bus < 0
+    debug("HyperRAM driver init failed, result = ", udec(bus))
+
+{
+  The number of stored datagrams
+}
+pub available(): result
+  ' (write + size - read) % size
+  return (write_pos + capacity - read_pos) +// capacity
+
+pub store(address)
+  mem.write(address, RAM + write_pos * datagram_size, datagram_size)
+  write_pos := (write_pos + 1) +// capacity
+
+pub fetch(address) : result
+  if available()
+    mem.read(address, RAM + read_pos * datagram_size, datagram_size)
+    read_pos := (read_pos + 1) +// capacity
+    return TRUE
+  else
+    return FALSE

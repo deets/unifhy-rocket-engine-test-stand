@@ -1,0 +1,46 @@
+con
+  _clkfreq = 300_000_000
+
+  ' A propplug on a header
+  RX0     = 35
+  TX0     = 37
+  BR_SERIAL = 1_000_000
+
+  DEBUG_BAUD  = 230_400
+
+  DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
+  BUFFER_CAPACITY = 16_000_000 / DATAGRAM_SIZE
+
+var
+  long entry[2]
+  long readback[2]
+  long stack[2048]
+  long value
+obj
+  adc: "buffered_ads1256"
+  serial: "jm_fullduplexserial"
+  sdwriter: "sdwriter"
+  util: "util"
+  rb: "hyper_ringbuffer"
+
+pub main() | i, a
+  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
+  debug("capacity:", udec(BUFFER_CAPACITY))
+  cogspin(NEWCOG, reader(), @stack)
+  repeat i from 0 to BUFFER_CAPACITY - 1
+    entry[0] := i
+    entry[1] := i + 1
+    rb.store(@entry)
+  debug("done")
+  repeat
+  '  debug("reading at: ", uhex(value))
+
+pri reader()
+  value := 0
+  repeat until value == BUFFER_CAPACITY - 1
+    repeat until rb.available()
+    rb.fetch(@readback)
+    if readback[0] <> value or readback[1] <> value + 1
+      debug("integrity error")
+    value += 1
+  debug("reading done")
