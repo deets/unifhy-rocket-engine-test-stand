@@ -6,41 +6,91 @@ con
   TX0     = 37
   BR_SERIAL = 1_000_000
 
-  DEBUG_BAUD  = 230_400
+  DEBUG_BAUD  = 2_000_000
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 16_000_000 / DATAGRAM_SIZE
+  BUFFER_CAPACITY = 7500 * 10 '16_000_000 / DATAGRAM_SIZE
+
+  ADC_BUFFER_SIZE = 100
+  ADC_CLK = 16
+  ADC_SDO = 17
+  ADC_SDI = 18
+  ADC_DRDY = 19
+  ADC_CS = 20
+  ADC_PDWN = 21
 
 var
-  long entry[2]
-  long readback[2]
   long stack[2048]
-  long value
+
+  '
+  LONG values_read
+
+  ' The following three items are the ringbuffer
+  ' for the buffered reader.
+  LONG read
+  LONG write
+  LONG buffer[ADC_BUFFER_SIZE * 2]
+  ' here comes the mux buffer that
+  ' holds the channel selection for
+  ' the ADC
+  BYTE mux_buffer[8]
+  BYTE mux_buffer_length
+
+  'BYTE rb_buffer[DATAGRAM_SIZE * BUFFER_CAPACITY]
 obj
   adc: "buffered_ads1256"
-  serial: "jm_fullduplexserial"
-  sdwriter: "sdwriter"
-  util: "util"
   rb: "hyper_ringbuffer"
 
-pub main() | i, a
+pub main() | i, timestamp, mux, value, reader_cog, h, start
+  values_read := 0
+
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
+  'rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @rb_buffer)
   debug("capacity:", udec(BUFFER_CAPACITY))
-  cogspin(NEWCOG, reader(), @stack)
-  repeat i from 0 to BUFFER_CAPACITY - 1
-    entry[0] := i
-    entry[1] := i + 1
-    rb.store(@entry)
-  debug("done")
+  reader_cog := cogspin(NEWCOG, reader(), @stack)
+  adc_init()
+  adc.start_continuous_read(@mux_buffer, mux_buffer_length)
+
+  start := getsec()
+
+  repeat values_read from 0 to BUFFER_CAPACITY - 2
+      timestamp, mux, value := adc.read_continuous()
+      feed(timestamp, mux, value)
+
+  adc.stop_continuous_read()
+  h := getsec() - start
+  debug("writing took: ", udec(h))
+  ' notify the reader cog
+  ' that we are done
+  cogatn(1 << reader_cog)
   repeat
+    h := rb.available()
+    'debug("available: ", udec(h))
+    waitms(500)
+
   '  debug("reading at: ", uhex(value))
 
-pri reader()
-  value := 0
-  repeat until value == BUFFER_CAPACITY - 1
-    repeat until rb.available()
-    rb.fetch(@readback)
-    if readback[0] <> value or readback[1] <> value + 1
-      debug("integrity error")
-    value += 1
+pri adc_init()
+  read := ADC_BUFFER_SIZE
+  adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
+  mux_buffer[0] := $08 ' channel 0, single-sided
+  mux_buffer_length := 1
+  adc.wreg(adc.RDRATE, %11010000) ' 7500
+  'adc.wreg(adc.RDRATE, %00000011) ' 2.5
+
+pri feed(timestamp, mux, value) | entry[2]
+  entry[0] := timestamp
+  entry[1] := mux << 24 | value & $00ffffff
+  rb.store(@entry)
+
+pri reader() | entry[2], count
+  count := 0
+  pollatn()
+  repeat until pollatn() == -1
+    repeat while rb.available()
+      rb.fetch(@entry)
+      count += 1
+      'debug("fetched:", udec(count), udec(rb.available()))
+
   debug("reading done")
+  repeat
