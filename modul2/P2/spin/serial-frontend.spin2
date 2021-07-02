@@ -15,6 +15,7 @@ con
   ADC_DRDY = 19
   ADC_CS = 20
   ADC_PDWN = 21
+  ADC_BUFFER_SIZE = 100
 
   LF = $a
   CR = $d
@@ -22,7 +23,7 @@ con
   ASTERISK = $2a
 
   INSTRUCTION_BUFFER_SIZE = 8
-  BUFFER_SIZE = 100
+
   SERIAL_BUFFER_SIZE = 1024
 
   SD_DO = 58
@@ -35,9 +36,12 @@ con
 
 var
   BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
+  ' The following three items are the ringbuffer
+  ' for the buffered reader.
   LONG read
   LONG write
-  LONG buffer[BUFFER_SIZE * 2]
+  LONG buffer[ADC_BUFFER_SIZE * 2]
+
   BYTE serial_input_buffer[6]  ' We always start with $RQADS
   BYTE payload[SERIAL_BUFFER_SIZE - 6]
   BYTE serial_input_buffer_pos
@@ -65,7 +69,7 @@ pub main() | c, correct, success
   serial_output_buffer_pos := 0
   thinning := 255
   serial.start(RX0, TX0, %0000, BR_SERIAL)
-  read := BUFFER_SIZE
+  read := ADC_BUFFER_SIZE
   adc.start(ADC_SDI, ADC_SDO, ADC_CLK, ADC_CS, ADC_DRDY, ADC_PDWN, @read)
   sdwriter.start(@rb.store, @rb.available, @rb.fetch)
   serial_input_buffer_pos := 0
