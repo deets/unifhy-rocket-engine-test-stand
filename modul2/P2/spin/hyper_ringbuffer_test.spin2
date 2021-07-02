@@ -19,6 +19,11 @@ con
   ADC_CS = 20
   ADC_PDWN = 21
 
+  ' A propplug on a header
+  RX0     = 35
+  TX0     = 37
+  BR_SERIAL = 1_000_000
+
 var
   long stack[2048]
 
@@ -40,6 +45,7 @@ var
 obj
   adc: "buffered_ads1256"
   rb: "hyper_ringbuffer"
+  serial: "jm_fullduplexserial"
 
 pub main() | i, timestamp, mux, value, reader_cog, h, start
   values_read := 0
@@ -84,13 +90,16 @@ pri feed(timestamp, mux, value) | entry[2]
   rb.store(@entry)
 
 pri reader() | entry[2], count
+  serial.start(RX0, TX0, %0000, BR_SERIAL)
+
   count := 0
   pollatn()
   repeat until pollatn() == -1
     repeat while rb.available()
       rb.fetch(@entry)
       count += 1
-      'debug("fetched:", udec(count), udec(rb.available()))
+      serial.fstr4(string("fetched: %d, %d, %8x, %8x\r\n"), count, rb.available(), entry[0], entry[1])
 
+  serial.fstr0(string("done\r\n"))
   debug("reading done")
   repeat
