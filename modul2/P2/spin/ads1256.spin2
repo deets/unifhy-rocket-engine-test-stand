@@ -29,8 +29,8 @@ pub start(sdipin, sdopin, sckpin, cs_pin_, drdy_pin_, pdwn_pin_) : result
     reset()
   return result
 
-pub rreg(start, count): result | h
-  h := (($10 | start) << 8) | count - 1
+pub rreg(first_reg, count): result | h
+  h := (($10 | first_reg) << 8) | count - 1
   pinlow(cs_pin)
   waitus(50) ' cargo cult?
   spi.shiftout(spi.MSBFIRST, h, 16)
