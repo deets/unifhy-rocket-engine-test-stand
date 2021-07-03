@@ -69,7 +69,7 @@ pub begin()
     cogatn(1 << cog)
     waitatn()
 
-pub end(total_samples_, avg_timediff_, max_timediff_, max_sample_)
+pub finish(total_samples_, avg_timediff_, max_timediff_, max_sample_)
   ' we don't need a command, begin has
   ' put cog into a loop that we leave using atn
   if running > 0
@@ -85,7 +85,7 @@ pub feed(timestamp, mux, value)
   entry[1] := mux << 24 | value & $00ffffff
   store(@entry)
 
-pub file_listing_start(): result
+pub file_listing_start(): result, size
   debug(zstr(string("enumerate_file")))
   if running > 0
     cmd := "l"
@@ -93,9 +93,8 @@ pub file_listing_start(): result
     waitatn()
     return enumeration_result, enumeration_size
   else
-    return FILE_LIST_END
-
-pub file_listing_next(): result
+    return FILE_LIST_END, 0
+pub file_listing_next(): result, size
   ' signal the sync_cmd_list loop that
   ' it should get the next name
   cogatn(1 << cog)
@@ -191,14 +190,14 @@ pri sync_cmd_begin() | success
   if success <> 0
     debug("fat.newFile:error", zstr(success))
   fat.openFile(@filename, "W")
-  debug("fat.newFile", udec(result))
+  'debug("fat.newFile", udec(result))
   cogatn(1 << caller_cog)
 
   byte_counter := 0
   repeat until pollatn() == -1
     write_buffer()
   ' cleanup and signal the end call
-  repeat while available()
+  repeat while available
     write_buffer()
   write_statistics_line()
   fat.flushData()

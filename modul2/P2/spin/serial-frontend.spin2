@@ -170,7 +170,7 @@ pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
           adc.stop_continuous_read()
           ' TODO: consume the rest of the buffer before
           ' closing down
-          sdwriter.end(total_samples, avg_timediff, max_timediff, max_sample)
+          sdwriter.finish(total_samples, avg_timediff, max_timediff, max_sample)
           return
       timestamp, mux, value := adc.read_continuous()
       sdwriter.feed(timestamp, mux, value)

@@ -37,9 +37,9 @@ pub wreg(register, value)
   cogatn(1 << cog)
   waitatn()
 
-pub rreg(start, count): result
+pub rreg(first_reg, count): result
   instruction := IRREG
-  a := start
+  a := first_reg
   b := count
   cogatn(1 << cog)
   waitatn()
@@ -125,7 +125,7 @@ pri cdac(mux_buffer_address, mux_buffer_size) | last_mux, buf_pos, now, value
       adc.wakeup()
       repeat until pollatn() == -1
         adc.drdycycle()
-        now := cnt()
+        now := getct()
         value := adc.rdata()
         store(now, last_mux, value)
     else
@@ -135,7 +135,7 @@ pri cdac(mux_buffer_address, mux_buffer_size) | last_mux, buf_pos, now, value
       adc.wakeup()
       repeat until pollatn() == -1
         adc.drdycycle()
-        now := cnt()
+        now := getct()
         ' we first instruct the adc
         ' to change the input, as this allows
         ' it to settle and sample while
