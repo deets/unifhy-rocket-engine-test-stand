@@ -24,6 +24,7 @@ con
   TX0     = 37
   BR_SERIAL = 1_000_000
 
+  LINE_SIZE = 20 '<8>:<2>:<6>\r\n
   ' buttons and leds
   IO_OFFSET = 40
   LED_0 = 0
@@ -52,10 +53,12 @@ var
   BYTE mux_buffer_length
 
   'BYTE rb_buffer[DATAGRAM_SIZE * BUFFER_CAPACITY]
+  byte line_buffer[LINE_SIZE]
 obj
   adc: "buffered_ads1256"
   rb: "hyper_ringbuffer"
   serial: "jm_fullduplexserial"
+  util: "util"
 
 pub main() | timestamp, mux, value, reader_cog, h, start, use_sd
   pinsetup()
@@ -118,8 +121,27 @@ pri reader(use_sd) | entry[2], count, success
     repeat while rb.available()
       rb.fetch(@entry)
       count += 1
-      serial.fstr4(string("fetched: %d, %d, %8x, %8x\r\n"), count, rb.available(), entry[0], entry[1])
+      prepare_line(entry[0], entry[1])
+      serial.str(@line_buffer)
 
   serial.fstr0(string("done\r\n"))
   debug("reading done")
   repeat
+pri prepare_line(timestamp, value):result | mux, pos, err
+  mux := value >> 24
+  value &= $ffffff
+  line_buffer[0] := "D"
+  line_buffer[1] := ":"
+  pos := 2
+  pos += util.encode_hex_nibbles(@line_buffer + pos, timestamp, 8)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_byte(@line_buffer + pos, mux)
+  line_buffer[pos] := ":"
+  pos += 1
+  pos += util.encode_hex_nibbles(@line_buffer + pos, value, 6)
+  line_buffer[pos] := 13
+  line_buffer[pos + 1] := 10
+  pos += 2
+  line_buffer[pos] := 0
+  return pos
