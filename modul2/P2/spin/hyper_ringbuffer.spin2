@@ -49,3 +49,7 @@ pub fetch(address) : result
     return TRUE
   else
     return FALSE
+
+pub reset()
+  read_pos := 0
+  write_pos := 0

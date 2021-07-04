@@ -88,6 +88,7 @@ pub main() | timestamp, mux, value, reader_cog, h, start, use_sd
 
   repeat
     use_sd := waitpins()
+    rb.reset()
     debug("start ", udec(use_sd))
     values_read := 0
     reader_cog := cogspin(NEWCOG, reader(use_sd), @stack)
