@@ -57,51 +57,44 @@ obj
   rb: "hyper_ringbuffer"
   serial: "jm_fullduplexserial"
 
-pub main() | i, timestamp, mux, value, reader_cog, h, start
-  test()
-  values_read := 0
-
+pub main() | timestamp, mux, value, reader_cog, h, start, use_sd
+  pinsetup()
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
-  'rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @rb_buffer)
   debug("capacity:", udec(BUFFER_CAPACITY))
-  reader_cog := cogspin(NEWCOG, reader(), @stack)
   adc_init()
-  adc.start_continuous_read(@mux_buffer, mux_buffer_length)
 
-  start := getsec()
+  repeat
+    use_sd := waitpins()
+    debug("start ", udec(use_sd))
+    values_read := 0
+    reader_cog := cogspin(NEWCOG, reader(use_sd), @stack)
+    adc.start_continuous_read(@mux_buffer, mux_buffer_length)
+    start := getsec()
 
-  repeat values_read from 0 to BUFFER_CAPACITY - 2
+    repeat values_read from 0 to BUFFER_CAPACITY - 2
       timestamp, mux, value := adc.read_continuous()
       feed(timestamp, mux, value)
 
-  adc.stop_continuous_read()
-  h := getsec() - start
-  debug("writing took: ", udec(h))
-  ' notify the reader cog
-  ' that we are done
-  cogatn(1 << reader_cog)
+    adc.stop_continuous_read()
+    h := getsec() - start
+    debug("writing took: ", udec(h))
+    ' notify the reader cog
+    ' that we are done
+    cogatn(1 << reader_cog)
+
+pri waitpins(): result | use_sd
+  result := 0
   repeat
-    h := rb.available()
-    'debug("available: ", udec(h))
-    waitms(500)
+    result := pinread(IO_OFFSET + SWITCH_0 addpins 3)
+    use_sd := (result & 2) ? 1 : 0
+    if result & 1
+      quit
+  result := use_sd
 
-  '  debug("reading at: ", uhex(value))
-
-pri test() | i, p, btnpins
-  ' pinfloat((IO_OFFSET + SWITCH_0) addpins 4)
-  ' repeat
-  '   i := pinread(IO_OFFSET + SWITCH_0 addpins 4)
-  '   debug("pin:", udec(i), uhex((IO_OFFSET + SWITCH_0) addpins 4))
-
-  btnpins := IO_OFFSET+4 addpins 3                                   ' buttons are base+4..base+7
+pri pinsetup() | btnpins
+  btnpins := IO_OFFSET + SWITCH_0 addpins 3                     ' buttons are base+4..base+7
   wrpin(btnpins, P_LOW_15K)                                     ' select 15K pull-downs
   pinlow(btnpins)                                               ' activate pull-downs
-
-  repeat
-    p := pinread(IO_OFFSET + SWITCH_0 addpins 3)
-    pinwrite(IO_OFFSET + LED_0 addpins 3, p)
-    debug("multiple:", uhex_byte(p))
-    waitms(100)
 
 pri adc_init()
   read := ADC_BUFFER_SIZE
@@ -116,7 +109,7 @@ pri feed(timestamp, mux, value) | entry[2]
   entry[1] := mux << 24 | value & $00ffffff
   rb.store(@entry)
 
-pri reader() | entry[2], count
+pri reader(use_sd) | entry[2], count, success
   serial.start(RX0, TX0, %0000, BR_SERIAL)
 
   count := 0
