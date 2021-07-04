@@ -66,7 +66,7 @@ PRI GetBitTime(max_clkfreq) : bt
 
 PRI DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
     repeat while cmd <> 0
-    debug("Pushing command ",udec(_cmd),uhex_long(_arg1, _arg2, _arg3))
+    'debug("Pushing command ",udec(_cmd),uhex_long(_arg1, _arg2, _arg3))
     arg1 := _arg1
     arg2 := _arg2
     arg3 := _arg3
@@ -94,7 +94,7 @@ get_cmd
                 rdlong  arg3_in,        ++ptra
                 rdlong  err_out,        ++ptra              ' dummy read to align err pointer
                 '' decode command
-                debug("got command ",udec(cmd_in),uhex_long(arg1_in,arg2_in,arg3_in))
+                'debug("got command ",udec(cmd_in),uhex_long(arg1_in,arg2_in,arg3_in))
                 cmp     cmd_in,         #"r"    wz
         if_z    jmp     #read_a
                 cmp     cmd_in,         #"w"    wz
