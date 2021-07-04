@@ -200,7 +200,7 @@ pri find_last_file_index() : result | name, h
 pri write_to_fat(pos) | err
   err := fat.writeData(@line_buffer, pos)
   if err <> pos
-    debug("writeData:error", zstr(err))
+    'debug("writeData:error", zstr(err))
     pinhigh(SD_STATUS_PIN)
   byte_counter += pos
   if byte_counter >= FLUSH_AFTER_BYTES
