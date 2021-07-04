@@ -67,6 +67,12 @@ var
   long byte_counter
   byte line_buffer[LINE_SIZE]
 
+  ' The following three items are the ringbuffer
+  ' for the buffered reader.
+  LONG read
+  LONG write
+  LONG buffer[ADC_BUFFER_SIZE * 2]
+
 obj
   adc: "buffered_ads1256"
   rb: "hyper_ringbuffer"
