@@ -85,7 +85,7 @@ pub feed(timestamp, mux, value)
   entry[1] := mux << 24 | value & $00ffffff
   store(@entry)
 
-pub file_listing_start(): result, size
+pub file_listing_start(): result
   debug(zstr(string("enumerate_file")))
   if running > 0
     cmd := "l"
@@ -94,7 +94,8 @@ pub file_listing_start(): result, size
     return enumeration_result, enumeration_size
   else
     return FILE_LIST_END, 0
-pub file_listing_next(): result, size
+
+pub file_listing_next(): result
   ' signal the sync_cmd_list loop that
   ' it should get the next name
   cogatn(1 << cog)
