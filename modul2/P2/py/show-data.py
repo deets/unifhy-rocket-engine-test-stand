@@ -8,6 +8,9 @@ import plotly.graph_objects as go
 import numpy as np
 
 
+biggest_diff = 0
+last_value = None
+
 class PropClockTracker:
 
     def __init__(self, clkfreq):
@@ -33,6 +36,13 @@ class PropClockTracker:
         return self._clock
 
 
+def stats(value):
+    global last_value, biggest_diff
+    if last_value is not None:
+        biggest_diff = max(biggest_diff, abs(value - last_value))
+    last_value = value
+
+
 def main():
     clock = PropClockTracker(300_000_000)
     data = defaultdict(list)
@@ -48,7 +58,9 @@ def main():
         timestamp, mux, value = (int(p, 16) for p in [line[1], line[2], line[3]])
         seconds = clock.feed(timestamp)
         data[mux].append((seconds, value))
+        stats(value)
 
+    print("biggest_diff", biggest_diff)
     fig = go.Figure()
     print(clock.min_diff, clock.max_diff)
     for mux, values in data.items():
