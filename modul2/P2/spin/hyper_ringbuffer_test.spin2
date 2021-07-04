@@ -24,6 +24,16 @@ con
   TX0     = 37
   BR_SERIAL = 1_000_000
 
+  ' buttons and leds
+  IO_OFFSET = 40
+  LED_0 = 0
+  LED_1 = 1
+  LED_2 = 3
+  LED_3 = 2
+  SWITCH_0 = 4
+  SWITCH_1 = 5
+  SWITCH_2 = 7
+  SWITCH_3 = 6
 var
   long stack[2048]
 
@@ -48,6 +58,7 @@ obj
   serial: "jm_fullduplexserial"
 
 pub main() | i, timestamp, mux, value, reader_cog, h, start
+  test()
   values_read := 0
 
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
@@ -75,6 +86,22 @@ pub main() | i, timestamp, mux, value, reader_cog, h, start
     waitms(500)
 
   '  debug("reading at: ", uhex(value))
+
+pri test() | i, p, btnpins
+  ' pinfloat((IO_OFFSET + SWITCH_0) addpins 4)
+  ' repeat
+  '   i := pinread(IO_OFFSET + SWITCH_0 addpins 4)
+  '   debug("pin:", udec(i), uhex((IO_OFFSET + SWITCH_0) addpins 4))
+
+  btnpins := IO_OFFSET+4 addpins 3                                   ' buttons are base+4..base+7
+  wrpin(btnpins, P_LOW_15K)                                     ' select 15K pull-downs
+  pinlow(btnpins)                                               ' activate pull-downs
+
+  repeat
+    p := pinread(IO_OFFSET + SWITCH_0 addpins 3)
+    pinwrite(IO_OFFSET + LED_0 addpins 3, p)
+    debug("multiple:", uhex_byte(p))
+    waitms(100)
 
 pri adc_init()
   read := ADC_BUFFER_SIZE
