@@ -9,7 +9,7 @@ con
   DEBUG_BAUD  = 2_000_000
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
-  BUFFER_CAPACITY = 7500 * 10 '16_000_000 / DATAGRAM_SIZE
+  BUFFER_CAPACITY = 7500 * 3 '16_000_000 / DATAGRAM_SIZE
 
   ADC_BUFFER_SIZE = 100
   ADC_CLK = 16
@@ -143,6 +143,7 @@ pri reader(use_sd) | entry[2], count, success, pos
       serial.str(@line_buffer)
 
   serial.fstr0(string("done\r\n"))
+  serial.txflush()
   if use_sd
     stop_fat()
   debug("reading done")

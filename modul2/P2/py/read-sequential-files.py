@@ -11,7 +11,6 @@ def main():
     conn = serial.Serial(PORT, BAUD)
     for number in count(1):
         filename = f"/tmp/RQADS{number:03x}.DAT"
-        print(f"\nstreaming to {filename}")
         with open(filename, "wb") as outf:
             while True:
                 line = conn.readline()
@@ -20,6 +19,7 @@ def main():
                 outf.write(line)
                 print(".", end="")
                 sys.stdout.flush()
+            print(f"\nstreamed to {filename}")
 
 
 if __name__ == '__main__':
