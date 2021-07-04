@@ -50,11 +50,6 @@ var
   '
   LONG values_read
 
-  ' The following three items are the ringbuffer
-  ' for the buffered reader.
-  LONG read
-  LONG write
-  LONG buffer[ADC_BUFFER_SIZE * 2]
   ' here comes the mux buffer that
   ' holds the channel selection for
   ' the ADC
@@ -145,8 +140,9 @@ pri reader(use_sd) | entry[2], count, success, pos
       rb.fetch(@entry)
       count += 1
       pos := prepare_line(entry[0], entry[1])
-      if use_sd
-        write_to_fat(pos)
+      'pos := prepare_line(count, count +// 1024)
+      ' if use_sd
+      '   write_to_fat(pos)
       serial.str(@line_buffer)
 
   serial.fstr0(string("done\r\n"))
