@@ -3,13 +3,16 @@
 import sys
 import pathlib
 from collections import defaultdict
+from itertools import count
 
 import plotly.graph_objects as go
 import numpy as np
 
+PROP_FREQ = 300_000_000
 
 biggest_diff = 0
 last_value = None
+
 
 class PropClockTracker:
 
@@ -43,8 +46,27 @@ def stats(value):
     last_value = value
 
 
+class LinearClock:
+
+    def __init__(self):
+        self._count = count()
+        self._pclock = PropClockTracker(PROP_FREQ)
+
+    def feed(self, timestamp):
+        self._pclock.feed(timestamp)
+        return next(self._count)
+
+    @property
+    def min_diff(self):
+        return self._pclock.min_diff
+
+    @property
+    def max_diff(self):
+        return self._pclock.max_diff
+
+
 def main():
-    clock = PropClockTracker(300_000_000)
+    clock = LinearClock() #PropClockTracker()
     data = defaultdict(list)
     for line in pathlib.Path(sys.argv[1]).open("r"):
         line = line.strip()
@@ -53,8 +75,8 @@ def main():
         line = line.split(":")
         if line[0] != "D":
             continue
-        #timestamp, mux, value = (int(p, 16) for p in line.split(":"))
-        #D:5A9C9D9C:08:2FE7BC
+        # timestamp, mux, value = (int(p, 16) for p in line.split(":"))
+        # D:5A9C9D9C:08:2FE7BC
         timestamp, mux, value = (int(p, 16) for p in [line[1], line[2], line[3]])
         seconds = clock.feed(timestamp)
         data[mux].append((seconds, value))
