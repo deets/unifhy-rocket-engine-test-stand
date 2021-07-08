@@ -2,14 +2,15 @@ con
   _clkfreq = 300_000_000
 
   ' A propplug on a header
-  RX0     = 35
-  TX0     = 37
+  RX0     = 11
+  TX0     = 13
   BR_SERIAL = 1_000_000
 
   DEBUG_BAUD  = 2_000_000
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
   BUFFER_CAPACITY = 7500 * 3 '16_000_000 / DATAGRAM_SIZE
+  'BUFFER_CAPACITY = 500 * 3
 
   ADC_BUFFER_SIZE = 100
   ADC_CLK = 16
@@ -18,11 +19,6 @@ con
   ADC_DRDY = 19
   ADC_CS = 20
   ADC_PDWN = 21
-
-  ' A propplug on a header
-  RX0     = 35
-  TX0     = 37
-  BR_SERIAL = 1_000_000
 
   ' P2 Eval Board Assignment
   SD_DO = 58
@@ -35,7 +31,7 @@ con
   LINE_SIZE = 40 '<8>:<2>:<6>\r\n, times two
   FLUSH_AFTER_BYTES = 512
   ' buttons and leds
-  IO_OFFSET = 40
+  IO_OFFSET = 0
   LED_0 = 0
   LED_1 = 1
   LED_2 = 3
@@ -75,7 +71,7 @@ obj
   fat: "FAT32"
   util: "util"
 
-pub main() | timestamp, mux, value, reader_cog, h, start, use_sd
+pub main() | timestamp, mux, value, reader_cog, h, start, use_sd, count
   pinsetup()
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
   debug("capacity:", udec(BUFFER_CAPACITY))
@@ -83,23 +79,35 @@ pub main() | timestamp, mux, value, reader_cog, h, start, use_sd
 
   repeat
     use_sd := waitpins()
-    rb.reset()
+        rb.reset()
+    rb.fill(@fill_buffer, @fill_buffer_end - @fill_buffer)
     debug("start ", udec(use_sd))
     values_read := 0
-    reader_cog := cogspin(NEWCOG, reader(use_sd), @stack)
+
+    reader_cog := start_reader(use_sd)
+
     adc.start_continuous_read(@mux_buffer, mux_buffer_length)
     start := getsec()
-
+    'count := 0
     repeat values_read from 0 to BUFFER_CAPACITY - 2
       timestamp, mux, value := adc.read_continuous()
+      'timestamp := count
+      'value := count +// 1024
       feed(timestamp, mux, value)
+      'count += 1
 
     adc.stop_continuous_read()
     h := getsec() - start
     debug("writing took: ", udec(h))
+    'reader_cog := start_reader(use_sd)
     ' notify the reader cog
     ' that we are done
     cogatn(1 << reader_cog)
+
+pri start_reader(use_sd) : result
+    result := cogspin(NEWCOG, reader(use_sd, cogid()), @stack)
+    waitatn()
+    debug("reader started")
 
 pri waitpins(): result | use_sd
   result := 0
@@ -121,6 +129,7 @@ pri adc_init()
   mux_buffer[0] := $08 ' channel 0, single-sided
   mux_buffer_length := 1
   adc.wreg(adc.RDRATE, %11010000) ' 7500
+  'adc.wreg(adc.RDRATE, %10010010) ' 500
   'adc.wreg(adc.RDRATE, %00000011) ' 2.5
 
 pri feed(timestamp, mux, value) | entry[2]
@@ -128,21 +137,20 @@ pri feed(timestamp, mux, value) | entry[2]
   entry[1] := mux << 24 | value & $00ffffff
   rb.store(@entry)
 
-pri reader(use_sd) | entry[2], count, success, pos
+pri reader(use_sd, caller_cog) | entry[2], count, success, pos
   count := 0
   serial.start(RX0, TX0, %0000, BR_SERIAL)
   if use_sd
     start_fat()
-
-  pollatn()
+  cogatn(1 << caller_cog)
   repeat until pollatn() == -1
     repeat while rb.available()
       rb.fetch(@entry)
       count += 1
       pos := prepare_line(entry[0], entry[1])
       'pos := prepare_line(count, count +// 1024)
-      ' if use_sd
-      '   write_to_fat(pos)
+      if use_sd
+        write_to_fat(pos)
       serial.str(@line_buffer)
 
   serial.fstr0(string("done\r\n"))
@@ -204,6 +212,7 @@ pri write_to_fat(pos) | err
     byte_counter := 0
 
 pri prepare_line(timestamp, value):result | mux, pos, err
+  pos := 0
   mux := value >> 24
   value &= $ffffff
   line_buffer[0] := "D"
@@ -221,3 +230,8 @@ pri prepare_line(timestamp, value):result | mux, pos, err
   pos += 2
   line_buffer[pos] := 0
   return pos
+
+DAT
+
+fill_buffer long $a5a5a5a5, $ff00ff00, $13579BDF, $00000000
+fill_buffer_end
