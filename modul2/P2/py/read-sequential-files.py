@@ -10,7 +10,7 @@ BAUD = 1_000_000
 def main():
     conn = serial.Serial(PORT, BAUD)
     for number in count(1):
-        filename = f"/tmp/RQADS{number:03x}.DAT"
+        filename = f"/tmp/RQADS{number:03X}.DAT"
         with open(filename, "wb") as outf:
             while True:
                 line = conn.readline()
