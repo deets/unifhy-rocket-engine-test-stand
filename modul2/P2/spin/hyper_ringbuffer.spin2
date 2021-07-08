@@ -1,7 +1,6 @@
 con
-  _clkfreq = 300_000_000
 
-  BASE  = 0
+  BASE  = 32
   RAM   = $10_000000
   FLASH = -1
 
@@ -27,10 +26,11 @@ pub init(datagram_size_, capacity_, buffer_address)
   capacity := capacity_
   read_pos := 0
   write_pos := 0
-  bus := mem.initHyperDriver(BASE,    RAM,     FLASH,     FLAGS, clkfreq, -1)
+  bus := mem.initHyperDriver(BASE, RAM, FLASH, FLAGS, clkfreq, -1)
   if bus < 0
     debug("HyperRAM driver init failed, result = ", udec(bus))
 
+  selftest()
 {
   The number of stored datagrams
 }
@@ -53,3 +53,20 @@ pub fetch(address) : result
 pub reset()
   read_pos := 0
   write_pos := 0
+
+pub fill(buffer, size) | pos
+  debug("fill HyperRAM:", uhex(buffer), udec(size))
+  pos := 0
+  repeat until pos >= capacity
+    mem.write(buffer, RAM + pos, capacity - pos <# size)
+    pos += size
+
+pri selftest() | data, readback
+  data := $abcd1234
+  mem.write(@data, RAM, 4)
+  mem.read(@readback, RAM, 4)
+  if data <> readback
+    debug("HyperRAM selftest not succesful, aborting!")
+    abort
+  else
+    debug("HyperRAM selftest succesful.")
