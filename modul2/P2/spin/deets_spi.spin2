@@ -1,28 +1,17 @@
 '' =================================================================================================
 ''
-''   File....... jm_ez_spi.spin2
-''   Purpose.... Smart pin Mode 0 SPI routines
-''   Author..... Jon "JonnyMac" McPhalen
-''               Copyright (c) 2020 Jon McPhalen
+''   File....... deets_spi.spin2
+''   Purpose.... Smart pin SPI routines
+''   Author..... Diez "deets" Roggisch
+''               Copyright (c) 2021 Diez B. Roggisch
 ''               -- see below for terms of use
-''   E-mail..... jon.mcphalen@gmail.com
+''   E-mail..... deets@web.de
 ''   Started....
-''   Updated.... 01 SEP 2020
+''   Updated.... 12 OCT 2021
 ''
 ''   {$P2}
 ''
 '' =================================================================================================
-
-
-con { fixed io pins }
-
-  RX1      = 63  { I }                                          ' programming / debug
-  TX1      = 62  { O }
-
-  SF_CS    = 61  { O }                                          ' serial flash
-  SF_SCK   = 60  { O }
-  SF_SDO   = 59  { O }
-  SF_SDI   = 58  { I }
 
 
 con
