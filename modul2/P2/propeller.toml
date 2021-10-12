@@ -1,12 +1,17 @@
 [project]
-#main-file="spin/serial-frontend.spin2"
+main-file="spin/serial-frontend.spin2"
 #main-file="spin/ads-test.spin2"
 #main-file="spin/fat-test.spin2"
 #main-file="spin/numerical-test.spin2"
-main-file="spin/hyper_ringbuffer_test.spin2"
+#main-file="spin/hyper_ringbuffer_test.spin2"
 libraries=[
 ]
 
 [propeller]
 kind="P2"
 serial-device="/dev/serial/by-id/usb-Parallax_Inc_Propeller_P2-EVAL_PLX4L28HW-if00-port0"
+
+[defines]
+# Define which board we are targeting
+P2EVAL=""
+#UNIHFY=""

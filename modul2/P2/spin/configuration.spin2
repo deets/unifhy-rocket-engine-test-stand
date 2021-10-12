@@ -1,0 +1,24 @@
+con
+#IFDEF P2EVAL
+' A propplug on a header
+  RX0     = 35
+  TX0     = 37
+  BR_SERIAL = 1_000_000
+
+  DEBUG_BAUD  = 230_400
+
+  ADC_CLK = 16
+  ADC_SDO = 17
+  ADC_SDI = 18
+  ADC_DRDY = 19
+  ADC_CS = 20
+  ADC_PDWN = 21
+
+  SD_DO = 58
+  SD_DI = 59
+  SD_CS = 60
+  SD_CLK = 61
+#ELSEIFDEF UNIFHY
+#ELSE
+#ERROR "Please specify target board - P2EVAL or UNIHFY"
+#ENDIF
