@@ -1,0 +1,58 @@
+con
+  _clkfreq = 300_000_000
+
+  ADC_BUFFER_SIZE = 100
+  INSTRUCTION_BUFFER_SIZE = 8
+
+  SERIAL_BUFFER_SIZE = 1024
+
+  DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
+  BUFFER_CAPACITY = 16_000_000 / DATAGRAM_SIZE
+
+  DEBUG_BAUD = 2_000_000
+
+var
+  BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
+  ' The following three items are the ringbuffer
+  ' for the buffered reader.
+  LONG read
+  LONG write
+  LONG buffer[ADC_BUFFER_SIZE * 2]
+
+  BYTE thinning
+  BYTE mux_buffer[8]
+  BYTE mux_buffer_length
+  ' Some statistical values from the last CDAC run
+  LONG total_samples, avg_timediff, max_timediff, max_sample
+
+obj
+  conf: "configuration"
+  status: "status"
+  ' adc: "buffered_ads1256"
+  ' sdwriter: "sdwriter"
+  ' util: "util"
+  ' rb: "hyper_ringbuffer"
+
+pub main()
+  status.start()
+  ' rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
+
+  thinning := 255
+  read := ADC_BUFFER_SIZE
+  ' adc.start(conf.ADC_SDI, conf.ADC_SDO, conf.ADC_CLK, conf.ADC_CS, conf.ADC_DRDY, conf.ADC_PDWN, @read)
+  ' sdwriter.start(@rb.store, @rb.available, @rb.fetch)
+
+  DEBUG("switched frontend")
+  repeat
+    status.set_system_ok()
+    waitms(1000)
+    status.set_system_error()
+    waitms(1000)
+    status.set_system_capturing()
+    waitms(1000)
+    status.set_sd_ok()
+    waitms(1000)
+    status.set_sd_error()
+    waitms(1000)
+    status.set_sd_writing()
+    waitms(1000)

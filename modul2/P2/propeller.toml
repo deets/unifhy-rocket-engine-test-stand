@@ -1,5 +1,6 @@
 [project]
-main-file="spin/serial-frontend.spin2"
+main-file="spin/switched-frontend.spin2"
+#main-file="spin/serial-frontend.spin2"
 #main-file="spin/ads-test.spin2"
 #main-file="spin/fat-test.spin2"
 #main-file="spin/numerical-test.spin2"

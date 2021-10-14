@@ -1,0 +1,51 @@
+con
+  #0, SYSTEM_OK, SYSTEM_CAPTURING, SYSTEM_ERROR
+  #0, SD_OK, SD_WRITING, SD_ERROR
+
+var
+  byte cog, system_status, sd_status
+  long stack[1000]
+
+obj
+  conf: "configuration"
+
+pub start()
+  system_status := SYSTEM_OK
+  sd_status := SD_OK
+  cog := cogspin(NEWCOG, main(), @stack)
+
+pub set_system_state(state)
+  system_status := state
+
+pub set_system_ok()
+  system_status := SYSTEM_OK
+
+pub set_system_capturing()
+  system_status := SYSTEM_CAPTURING
+
+pub set_system_error()
+  system_status := SYSTEM_ERROR
+
+pub set_sd_state(state)
+  sd_status := state
+
+pub set_sd_ok()
+  sd_status := SD_OK
+
+pub set_sd_writing()
+  sd_status := SD_WRITING
+
+pub set_sd_error()
+  sd_status := SD_ERROR
+
+pri main()
+  repeat
+    case system_status
+      SYSTEM_OK: pinlow(conf.SYSTEM_STATUS_PIN)
+      SYSTEM_CAPTURING: pinhigh(conf.SYSTEM_STATUS_PIN)
+      SYSTEM_ERROR: pintoggle(conf.SYSTEM_STATUS_PIN)
+    case sd_status
+      SD_OK: pinlow(conf.SD_STATUS_PIN)
+      SD_WRITING: pinhigh(conf.SD_STATUS_PIN)
+      SD_ERROR: pintoggle(conf.SD_STATUS_PIN)
+    waitms(100)
