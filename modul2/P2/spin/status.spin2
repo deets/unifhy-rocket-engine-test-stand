@@ -12,6 +12,7 @@ obj
 pub start()
   system_status := SYSTEM_OK
   sd_status := SD_OK
+  pinstart(conf.CAPTURE_SWITCH, P_NORMAL | P_LOW_15K, 0, 0)
   cog := cogspin(NEWCOG, main(), @stack)
 
 pub set_system_state(state)
@@ -37,6 +38,9 @@ pub set_sd_writing()
 
 pub set_sd_error()
   sd_status := SD_ERROR
+
+pub should_capture() : result
+  return pinread(conf.CAPTURE_SWITCH)
 
 pri main()
   repeat

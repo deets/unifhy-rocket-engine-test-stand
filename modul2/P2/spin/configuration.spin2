@@ -20,6 +20,8 @@ con
   SD_CLK = 61
   SD_STATUS_PIN = 25
 
+  CAPTURE_SWITCH = 27
+
 #ELSEIFDEF UNIFHY
 #ELSE
 #ERROR "Please specify target board - P2EVAL or UNIHFY"
