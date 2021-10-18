@@ -1,7 +1,7 @@
 con
   _clkfreq = 300_000_000
 
-  ADC_BUFFER_SIZE = 100
+  ADC_BUFFER_SIZE = 50000
   INSTRUCTION_BUFFER_SIZE = 8
 
   SERIAL_BUFFER_SIZE = 1024
@@ -15,11 +15,10 @@ var
   BYTE instruction_buffer[INSTRUCTION_BUFFER_SIZE]
   ' The following three items are the ringbuffer
   ' for the buffered reader.
-  LONG read
-  LONG write
-  LONG buffer[ADC_BUFFER_SIZE * 2]
+  LONG adc_buffer_read
+  LONG adc_buffer_write
+  LONG adc_buffer[ADC_BUFFER_SIZE * 2]
 
-  BYTE thinning
   BYTE mux_buffer[8]
   BYTE mux_buffer_length
   ' Some statistical values from the last CDAC run
@@ -28,23 +27,65 @@ var
 obj
   conf: "configuration"
   status: "status"
-  ' adc: "buffered_ads1256"
-  ' sdwriter: "sdwriter"
+  adc: "buffered_ads1256"
+  sdwriter: "sdwriter"
   ' util: "util"
-  ' rb: "hyper_ringbuffer"
+  rb: "hyper_ringbuffer"
 
 pub main()
   status.start()
-  ' rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
 
-  thinning := 255
-  read := ADC_BUFFER_SIZE
-  ' adc.start(conf.ADC_SDI, conf.ADC_SDO, conf.ADC_CLK, conf.ADC_CS, conf.ADC_DRDY, conf.ADC_PDWN, @read)
-  ' sdwriter.start(@rb.store, @rb.available, @rb.fetch)
+  setup_adc()
+  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
+  sdwriter.start(@rb.store, @rb.available, @rb.fetch, @status.set_sd_state)
 
   DEBUG("switched frontend")
+
   repeat
+    status.set_system_idle()
     if status.should_capture()
       status.set_system_capturing()
-    else
-      status.set_system_ok()
+      do_cdac()
+
+
+pri do_cdac() | mux, timestamp, value, thinning_count, last_timestamp, timediff
+  sdwriter.begin()
+  adc.start_continuous_read(@mux_buffer, mux_buffer_length)
+  repeat
+    ' acquire one full set of samples
+    repeat mux_buffer_length
+        repeat until adc.available() > 0
+        'DEBUG("adc.available()")
+        timestamp, mux, value := adc.read_continuous()
+        sdwriter.feed(timestamp, mux, value)
+
+    if not status.should_capture()
+      adc.stop_continuous_read()
+      ' This waits until we really are empty
+      sdwriter.finish(total_samples, avg_timediff, max_timediff, max_sample)
+      return
+
+
+pri setup_adc()
+  ' This sets up the ADC buffer
+  ' protocol - read position at start
+  ' communicates the total length
+  adc_buffer_read := ADC_BUFFER_SIZE
+  adc.start(conf.ADC_SDI, conf.ADC_SDO, conf.ADC_CLK, conf.ADC_CS, conf.ADC_DRDY, conf.ADC_PDWN, @adc_buffer_read)
+
+#IFDEF P2EVAL
+  ' read the first channel
+  mux_buffer[0] := $8
+  mux_buffer_length := 1
+  ' 100/s
+  'adc.wreg(adc.RDRATE, %10000010)
+  ' 2.5/s
+  'adc.wreg(adc.RDRATE, %00000011)
+  ' 1000/s
+  adc.wreg(adc.RDRATE, %10100001)
+#ELSEIFDEF UNIFHY
+  ' Here comes the setup for the MUX-buffer
+  ' and PGA
+#ELSE
+#ERROR "Please specify target board - P2EVAL or UNIHFY"
+#ENDIF

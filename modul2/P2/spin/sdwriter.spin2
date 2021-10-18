@@ -8,8 +8,6 @@ con
   LINE_SIZE = 20 '<8>:<2>:<6>\r\n
   FLUSH_AFTER_BYTES = 512
 
-  SD_STATUS_PIN = 25
-
   FILE_LIST_END = $ffffffff
 
 var
@@ -26,23 +24,28 @@ var
 
   ' buffer callbacks
   long store, available, fetch
+  ' status callback
+  long set_sd_state
   ' wuergaround
   long signal
 obj
   fat: "FAT32"
   util: "util"
+  status: "status"
 
-pub start(store_, available_, fetch_) : result
+pub start(store_, available_, fetch_, set_sd_state_) : result
   store := store_
   available := available_
   fetch := fetch_
+  set_sd_state := set_sd_state_
   cog := cogspin(NEWCOG, main(cogid()), @stack)
   waitatn()
   return cog + 1
 
 pri main(caller_cog_) | success
   running := 0
-  pinhigh(SD_STATUS_PIN)
+  set_sd_state(status.SD_ERROR)
+
   caller_cog := caller_cog_
   success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
   debug(zstr(string("fatenginestart:")))
@@ -58,7 +61,7 @@ pri main(caller_cog_) | success
     file_index := find_last_file_index() + 1
     debug(zstr(string("file_index")))
     debug(uhex_word(file_index))
-    pinlow(SD_STATUS_PIN)
+    set_sd_state(status.SD_OK)
     running := 1
 
   mainloop()
@@ -187,33 +190,42 @@ pri sync_cmd_begin() | success
   util.encode_hex_nibbles(@filename + 5, file_index, 3)
   file_index += 1
   debug(zstr(@filename))
-  success := \fat.newFile(@filename)
-  if success <> 0
-    debug("fat.newFile:error", zstr(success))
+  success := fat.newFile(@filename)
+  set_sd_state(status.SD_WRITING)
   fat.openFile(@filename, "W")
   'debug("fat.newFile", udec(result))
+
+  ' allow the calling cog to continue
   cogatn(1 << caller_cog)
 
   byte_counter := 0
+  ' until we get signalled by finish
   repeat until pollatn() == -1
-    write_buffer()
+    if available()
+      write_buffer()
   ' cleanup and signal the end call
-  repeat while available
+  debug("sdwriter:teardown")
+  repeat while available()
     write_buffer()
   write_statistics_line()
   fat.flushData()
   fat.closeFile()
+  set_sd_state(status.SD_OK)
+  ' allow the finish call to continue
   cogatn(1 << caller_cog)
   signal := 1
 
 pri write_buffer()
   byte_counter += write_line()
+  'debug("sdwriter:write_buffer: ", udec(byte_counter))
+
   if byte_counter >= FLUSH_AFTER_BYTES
     fat.flushData()
     byte_counter := 0
 
 pri write_line(): result | mux, value, pos, err
   fetch(@write_entry)
+  'DEBUG("sdwriter::write_line")
   mux := write_entry[1] >> 24
   line_buffer[0] := "D"
   line_buffer[1] := ":"
@@ -233,8 +245,7 @@ pri write_line(): result | mux, value, pos, err
   line_buffer[pos] := 0
   err := fat.writeData(@line_buffer, pos)
   if err <> pos
-    debug("writeData:error", zstr(err))
-    pinhigh(SD_STATUS_PIN)
+    status.set_sd_error()
   return pos
 
 pri write_statistics_line(): result | pos
