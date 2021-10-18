@@ -5,8 +5,8 @@ con
 
   #0, STATUS, MUX, ADCON, DRATE, IO, OFC0, OFC1, OFC2, FSC0, FSC1, FSC2
 
-  T6 = 7 ' 50 * 1/7.68Mhz -> ~6.5 us
-  T11 = 2 ' 4 * T_CLKIN which is the period of the SPI signal.
+  T6 = 7 ' us 50 * 1/7.68Mhz -> ~6.5 us
+  T11 = 3 ' us,  24 * T_CLKIN which is the period of the master clock signal.
           ' It might be possible to remove this as other code
           ' probably already eats the time up
 var
@@ -70,9 +70,11 @@ pub drdycycle()
 
 pub sync()
   cmd($FC)
+  waitus(T11)
 
 pub wakeup()
   cmd($FF)
+  waitus(T11)
 
 pub rdata(): result
   ' this assumes we waited for DRDY 0!
