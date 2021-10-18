@@ -1,5 +1,5 @@
 con
-  #0, SYSTEM_OK, SYSTEM_CAPTURING, SYSTEM_ERROR
+  #0, SYSTEM_IDLE, SYSTEM_CAPTURING, SYSTEM_ERROR
   #0, SD_OK, SD_WRITING, SD_ERROR
 
 var
@@ -10,7 +10,7 @@ obj
   conf: "configuration"
 
 pub start()
-  system_status := SYSTEM_OK
+  system_status := SYSTEM_IDLE
   sd_status := SD_OK
   pinstart(conf.CAPTURE_SWITCH, P_NORMAL | P_LOW_15K, 0, 0)
   cog := cogspin(NEWCOG, main(), @stack)
@@ -18,8 +18,8 @@ pub start()
 pub set_system_state(state)
   system_status := state
 
-pub set_system_ok()
-  system_status := SYSTEM_OK
+pub set_system_idle()
+  system_status := SYSTEM_IDLE
 
 pub set_system_capturing()
   system_status := SYSTEM_CAPTURING
@@ -45,7 +45,7 @@ pub should_capture() : result
 pri main()
   repeat
     case system_status
-      SYSTEM_OK: pinlow(conf.SYSTEM_STATUS_PIN)
+      SYSTEM_IDLE: pinlow(conf.SYSTEM_STATUS_PIN)
       SYSTEM_CAPTURING: pinhigh(conf.SYSTEM_STATUS_PIN)
       SYSTEM_ERROR: pintoggle(conf.SYSTEM_STATUS_PIN)
     case sd_status
