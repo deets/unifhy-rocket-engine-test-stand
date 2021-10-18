@@ -1,7 +1,7 @@
 con
   _clkfreq = 300_000_000
 
-  ADC_BUFFER_SIZE = 50000
+  ADC_BUFFER_SIZE = 10000
   INSTRUCTION_BUFFER_SIZE = 8
 
   SERIAL_BUFFER_SIZE = 1024
@@ -82,7 +82,10 @@ pri setup_adc()
   ' 2.5/s
   'adc.wreg(adc.RDRATE, %00000011)
   ' 1000/s
-  adc.wreg(adc.RDRATE, %10100001)
+  'adc.wreg(adc.RDRATE, %10100001)
+  ' 7500/s
+  'adc.wreg(adc.RDRATE, %11010000)
+  adc.set_sample_rate(adc.SR_2_5)
 #ELSEIFDEF UNIFHY
   ' Here comes the setup for the MUX-buffer
   ' and PGA

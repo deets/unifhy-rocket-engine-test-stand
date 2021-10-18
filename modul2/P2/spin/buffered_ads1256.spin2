@@ -2,7 +2,7 @@ con
   ' mirror the ones of the underlying object
   #0, RSTATUS, RMUX, RADCON, RDRATE, RIO, ROFC0, ROFC1, ROFC2, RFSC0, RFSC1, RFSC2
   #100, IWREG, IRREG, IRSSC, ICDAC
-
+  #1, SR_2_5, SR_5, SR_10, SR_15, SR_25, SR_30, SR_50, SR_60, SR_100, SR_500, SR_1000, SR_2000, SR_3750, SR_7500, SR_15000, SR_30000
 var
   long cog
   long stack[128]
@@ -78,6 +78,43 @@ pub stop_continuous_read()
   debug("biggest_diff:", udec(biggest_diff))
   last_value := 0
   biggest_diff := 0
+
+pub set_sample_rate(sample_rate) | v
+  case sample_rate
+    SR_2_5:
+      v := %00000011
+    SR_5:
+      v := %00010011
+    SR_10:
+      v := %00100011
+    SR_15:
+      v := %00110011
+    SR_25:
+      v := %01000011
+    SR_30:
+      v := %01010011
+    SR_50:
+      v := %01100011
+    SR_60:
+      v := %01110010
+    SR_100:
+      v := %10000010
+    SR_500:
+      v := %10010010
+    SR_1000:
+      v := %10100001
+    SR_2000:
+      v := %10110000
+    SR_3750:
+      v := %11000000
+    SR_7500:
+      v := %11010000
+    SR_15000:
+      v := %11100000
+    SR_30000:
+      v := %11110000
+
+  wreg(RDRATE, v)
 
 pub available(): result
   ' (write + size - read) % size
