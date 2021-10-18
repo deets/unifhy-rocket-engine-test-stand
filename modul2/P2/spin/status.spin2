@@ -5,27 +5,29 @@ con
 var
   byte cog, system_status, sd_status
   long stack[1000]
-
+  long count, capacity
 obj
   conf: "configuration"
+  util: "util"
 
-pub start()
+pub start(capacity_)
+  capacity := capacity_
   system_status := SYSTEM_IDLE
   sd_status := SD_OK
   pinstart(conf.CAPTURE_SWITCH, P_NORMAL | P_LOW_15K, 0, 0)
   cog := cogspin(NEWCOG, main(), @stack)
 
-pub set_system_state(state)
-  system_status := state
+pub sample_written()
+  count += 1
 
 pub set_system_idle()
-  system_status := SYSTEM_IDLE
+  set_system_state(SYSTEM_IDLE)
 
 pub set_system_capturing()
-  system_status := SYSTEM_CAPTURING
+  set_system_state(SYSTEM_CAPTURING)
 
 pub set_system_error()
-  system_status := SYSTEM_ERROR
+  set_system_state(SYSTEM_ERROR)
 
 pub set_sd_state(state)
   sd_status := state
@@ -40,7 +42,27 @@ pub set_sd_error()
   sd_status := SD_ERROR
 
 pub should_capture() : result
+  if system_status == SYSTEM_IDLE
+    return pin_asserted()
+  DEBUG(UDEC(count), UDEC(capacity))
+  return pin_asserted() and count < capacity
+
+pri pin_asserted() : result
+  ' Active High
   return pinread(conf.CAPTURE_SWITCH)
+
+pri set_system_state(state)
+  if state == SYSTEM_IDLE and system_status <> SYSTEM_IDLE
+    ' we first have to wait until the user
+    ' flips back the switch before we go into
+    ' IDLE
+    repeat until not pin_asserted()
+    ' debunce the switch
+    waitms(100)
+  system_status := state
+  ' reset count when we switch to capturing mode
+  if state == SYSTEM_CAPTURING
+    count := 0
 
 pri main()
   repeat
