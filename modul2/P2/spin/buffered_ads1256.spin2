@@ -120,6 +120,9 @@ pri cdac(mux_buffer_address, mux_buffer_size) | last_mux, buf_pos, now, value
       adc.wakeup()
       repeat until pollatn() == -1
         adc.drdycycle()
+        adc.wreg(adc.MUX, last_mux)
+        adc.sync()
+        adc.wakeup()
         now := getct()
         value := adc.rdata()
         store(now, last_mux, value)
@@ -157,7 +160,6 @@ pri store(timestamp, mux, value) | wpos
   LONG[output_buffer_address][2 + wpos << 1] := timestamp
   LONG[output_buffer_address][2 + (wpos << 1) + 1] := (mux << 24 | value)
   wpos := (wpos + 1) +// output_buffer_size
-  LONG[output_buffer_address][1] := wpos
   LONG[output_buffer_address][1] := wpos
 
 pri stats(value) | diff
