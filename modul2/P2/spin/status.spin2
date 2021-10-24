@@ -3,19 +3,20 @@ con
   #0, SD_OK, SD_WRITING, SD_ERROR
 
 var
-  byte cog, system_status, sd_status
-  long stack[1000]
+  byte system_status, sd_status
   long count, capacity
 obj
   conf: "configuration"
   util: "util"
 
-pub start(capacity_)
+' The following methods are supposed to be invoked
+' from the same core
+pub setup(capacity_)
   capacity := capacity_
   system_status := SYSTEM_IDLE
   sd_status := SD_OK
   pinstart(conf.CAPTURE_SWITCH, P_NORMAL | P_LOW_15K, 0, 0)
-  cog := cogspin(NEWCOG, main(), @stack)
+  setup_status_pin()
 
 pub sample_written()
   count += 1
@@ -29,23 +30,16 @@ pub set_system_capturing()
 pub set_system_error()
   set_system_state(SYSTEM_ERROR)
 
-pub set_sd_state(state)
-  sd_status := state
-
-pub set_sd_ok()
-  sd_status := SD_OK
-
-pub set_sd_writing()
-  sd_status := SD_WRITING
-
-pub set_sd_error()
-  sd_status := SD_ERROR
-
 pub should_capture() : result
   if system_status == SYSTEM_IDLE
     return pin_asserted()
   DEBUG(UDEC(count), UDEC(capacity))
   return pin_asserted() and count < capacity
+
+' The SD-card status can be invoked from a different cog.
+pub set_sd_state(state)
+  sd_status := state
+  setup_sd_pin()
 
 pri pin_asserted() : result
   ' Active High
@@ -60,18 +54,23 @@ pri set_system_state(state)
     ' debunce the switch
     waitms(100)
   system_status := state
+  setup_status_pin()
   ' reset count when we switch to capturing mode
   if state == SYSTEM_CAPTURING
     count := 0
 
-pri main()
-  repeat
-    case system_status
-      SYSTEM_IDLE: pinlow(conf.SYSTEM_STATUS_PIN)
-      SYSTEM_CAPTURING: pinhigh(conf.SYSTEM_STATUS_PIN)
-      SYSTEM_ERROR: pintoggle(conf.SYSTEM_STATUS_PIN)
-    case sd_status
-      SD_OK: pinlow(conf.SD_STATUS_PIN)
-      SD_WRITING: pinhigh(conf.SD_STATUS_PIN)
-      SD_ERROR: pintoggle(conf.SD_STATUS_PIN)
-    waitms(100)
+pri setup_status_pin()
+  pinclear(conf.SYSTEM_STATUS_PIN)
+
+  case system_status
+    SYSTEM_IDLE: pinlow(conf.SYSTEM_STATUS_PIN)
+    SYSTEM_CAPTURING: pinhigh(conf.SYSTEM_STATUS_PIN)
+    SYSTEM_ERROR: pinstart(conf.SYSTEM_STATUS_PIN, P_PWM_SAWTOOTH+P_OE, 5000<<16+(clkfreq/10000), 2500)
+
+pri setup_sd_pin()
+  pinclear(conf.SD_STATUS_PIN)
+
+  case sd_status
+    SD_OK: pinlow(conf.SD_STATUS_PIN)
+    SD_WRITING: pinhigh(conf.SD_STATUS_PIN)
+    SD_ERROR: pinstart(conf.SD_STATUS_PIN, P_PWM_SAWTOOTH+P_OE, 5000<<16+(clkfreq/10000), 2500)

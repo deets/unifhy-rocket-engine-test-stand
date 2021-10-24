@@ -28,11 +28,10 @@ obj
   status: "status"
   adc: "buffered_ads1256"
   sdwriter: "sdwriter"
-  ' util: "util"
   rb: "hyper_ringbuffer"
 
 pub main()
-  status.start(BUFFER_CAPACITY)
+  status.setup(BUFFER_CAPACITY)
   setup_adc()
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
   sdwriter.start(@rb.store, @rb.available, @rb.fetch, @status.set_sd_state)

@@ -245,7 +245,7 @@ pri write_line(): result | mux, value, pos, err
   line_buffer[pos] := 0
   err := fat.writeData(@line_buffer, pos)
   if err <> pos
-    status.set_sd_error()
+    set_sd_state(status.SD_ERROR)
   return pos
 
 pri write_statistics_line(): result | pos
