@@ -135,6 +135,12 @@ do_init
                 getbyte pinCLK,         arg1_in,    #1
                 getbyte pinDI,          arg1_in,    #2
                 getbyte pinCS,          arg1_in,    #3
+                mov pinStart, #56
+                drvl pinStart
+                waitx   #$1f
+                drvh pinStart
+                waitx   #$1f
+                drvl pinStart
 
                 mov delay1s,err_out ' clkfreq!
                 jmp     #end_cmd
@@ -449,6 +455,7 @@ pinDO       res 1       ' do
 pinCLK      res 1       ' clk
 pinDI       res 1       ' di
 pinCS       res 1       ' chip select
+pinStart    res 1
 {===== Command Mailbox =====}
 ptr_to_mbox res 1       ' pointer to spin mailbox
 cmd_in      res 1       ' mailbox in
