@@ -20,7 +20,9 @@ CON
     APP_SEND_OP_COND = 41
     READ_OCR = 58
     SEND_IF_COND = 8
+    SET_BLOCKLEN = 16
 
+    OCR_CCS_BIT = 30
 VAR  byte cog
 
 PUB Stop()
@@ -297,20 +299,9 @@ card_init
                 mov     cmdout,         #SEND_IF_COND
                 mov     cmdpar,         #$1AA  ' this is just by the spec
                 call    #do_sdcmd
-                call    #read_byte                          ' read 32 bit
-                mov     err_out, reply
-                call    #read_byte
-                shl     err_out,#8
-                add     err_out,reply
-                call    #read_byte
-                shl     err_out,#8
-                add     err_out,reply
-                call    #read_byte
-                shl     err_out,#8
-                add     err_out,reply
-
+                call    #read_r3_r7
                 drvh    pinCS
-
+                ' Check that we are conforming to spec
                 bitl    err_out, #16 + (16 << 4)
                 cmp     err_out, #$1AA              wz
       if_nz     mov     err_out, ##-1
@@ -336,30 +327,39 @@ card_init
                 mov     cmdout,         #READ_OCR
                 mov     cmdpar,         #0
                 call    #do_sdcmd
-                call    #read_byte
-                testb   reply,          #6          wz
+                call    #read_r3_r7
+                drvh    pinCS    ' set cs high
+                ' check the card capacity status bit
+                ' to determine if we work block-based
+                testb   err_out,        #OCR_CCS_BIT          wz
         if_nz   mov     blocksh,        #9                  ' sd support
         if_nz   mov     err_out,        #1                  ' sd support, return card type 1
 
 
-'        if_nz   jmp     #end_cmd                            ' don't support SD, SDHC only
         if_z    mov     blocksh,        #0                  ' sdhc
         if_z    mov     err_out,        #2                  ' return card type 2
 
-
-
-                call    #read_byte
-                call    #read_byte
-                call    #read_byte
-                drvh    pinCS    ' set cs high
-
-                mov     cmdout,         #16                 ' cmd 16, BLOCKSIZE
+                mov     cmdout,         #SET_BLOCKLEN
                 mov     cmdpar,         ##sectorsize
                 call    #do_sdcmd
                 drvh    pinCS    ' set cs high
 
 
                 jmp #end_cmd
+
+read_r3_r7
+                call    #read_byte                          ' read the 32 bit of the R7 result
+                mov     err_out, reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+                call    #read_byte
+                shl     err_out,#8
+                add     err_out,reply
+read_r3_r7_ret  ret
 
 dat 'card_release
 card_release
