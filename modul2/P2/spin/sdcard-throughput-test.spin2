@@ -1,0 +1,56 @@
+con
+  _clkfreq = 300_000_000
+
+  DEBUG_BAUD  = 2_000_000
+
+  ' P2 Eval Board Assignment
+  SD_DO = 58
+  SD_DI = 59
+  SD_CS = 60
+  SD_CLK = 61
+  '
+  SD_STATUS_PIN = 25
+
+var
+  BYTE buffer[1024]
+
+obj
+  sd: "sdspi_with_audio"
+  util: "util"
+  serial: "jm_fullduplexserial"
+  conf: "configuration"
+
+pub main(): result | earlier, later, td, max_td, i
+  serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
+  result := sd.start_explicit(SD_DO, SD_CLK, SD_DI, SD_CS)
+
+  serial.fstr1(string("start_explicit: %d\r\n"), result)
+  result := sd.mountCard()
+  if result <> 2
+    serial.fstr1(string("unknown card: %d\r\n"), result)
+    repeat
+
+  serial.fstr1(string("mountCard: %d\r\n"), result)
+  max_td := 0
+  repeat i from 0 to 5
+    bytefill(@buffer, i, 1024)
+    earlier := getct()
+    sd.WriteBlock(i, @buffer)
+    later := getct()
+    td := util.timediff(earlier, later)
+    max_td #>= td
+    serial.fstr2(string("writeblock - td: %d, max_td: %d\r\n"), td, max_td)
+    'dump_block()
+
+
+pri dump_block() | offset
+  offset := 0
+  repeat 32
+    repeat 16
+      serial.fhex(@buffer + offset, 2)
+      offset += 1
+    nl()
+
+pri nl()
+  serial.tx(13)
+  serial.tx(10)

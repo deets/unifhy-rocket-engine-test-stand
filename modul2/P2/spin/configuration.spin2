@@ -1,9 +1,9 @@
 con
 #IFDEF P2EVAL
 ' A propplug on a header
-  RX0     = 35
-  TX0     = 37
-  BR_SERIAL = 1_000_000
+  RX0     = 10
+  TX0     = 12
+  BR_SERIAL = 2_000_000
 
   SYSTEM_STATUS_PIN = 24
 
