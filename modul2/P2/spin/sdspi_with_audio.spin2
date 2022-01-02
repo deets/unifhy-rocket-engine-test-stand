@@ -7,15 +7,19 @@ CON 'See end of file for license
     Thanks to all those out there in forum land!
     Original spin version by Radical Eye Software Copyright 2008
 }}
-    'sectorsize =   512
-    spi_clk_max =   25_000_00   ' 20mhz safe
+    sectorsize =   512
+    spi_clk_max =   25_000_000   ' 20mhz safe
     spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
 
 'RJA added multiblock reads and removed smartpin mode to boost speed
 'RJA also allows specifying cog # in con section below
 
 CON
-    'SPI_COG=6 'cog to use
+    GO_IDLE_STATE = 0
+    APP_CMD = 55
+    APP_SEND_OP_COND = 41
+    READ_OCR = 58
+    SEND_IF_COND = 8
 
 VAR  byte cog
 
@@ -122,7 +126,6 @@ end_cmd
                 mov     cmd_in,         #0                  ' signal done to spin driver
                 mov     ptra,           ptr_to_mbox         ' return ptra back to mbox
         if_z    wrlong  cmd_in,         ptr_to_mbox
-                debug("cmd done")
                 jmp     #get_cmd
 
 dat 'do_init     'RJA disabled smartpins
@@ -134,8 +137,6 @@ do_init
                 getbyte pinCS,          arg1_in,    #3
 
                 mov delay1s,err_out ' clkfreq!
-                debug(udec(delay1s))
-
                 jmp     #end_cmd
 
 
@@ -156,7 +157,7 @@ LoopMulti
                 cmp     x,#$FF wcz
         if_e    jmp     #LoopMulti
 
-                mov     spare, con512'##sectorsize
+                mov     spare, ##sectorsize
 .loop
                 rep     @.end_read, #8
                 drvl    pinCLK
@@ -215,7 +216,7 @@ read_a          '' arg1 is sd ptr, arg2 is hub
 
 'RJA making this faster...
 
-                mov     spare, con512'##sectorsize
+                mov     spare, ##sectorsize
 .loop
                 rep     @.end_read, #8
                 drvl    pinCLK
@@ -238,7 +239,6 @@ read_a          '' arg1 is sd ptr, arg2 is hub
 
 dat ' write_b        'write a sector
 write_b         '' arg1 is sd ptr, arg2 is hub
-                debug("In write func!")
                 mov     cmdout,         #24                 ' command = block write
                 shl     arg1_in,        blocksh             ' non-hc compatibility
                 mov     cmdpar,         arg1_in             ' sd block address
@@ -249,7 +249,7 @@ write_b         '' arg1 is sd ptr, arg2 is hub
                 call    #send_byte
                 rdfast  #0,             arg2_in
 
-                mov     spare,          con512'##sectorsize
+                mov     spare,          ##sectorsize
 .loop           rfbyte  dataout
                 call    #send_byte
                 djnz    spare,          #.loop
@@ -277,22 +277,22 @@ card_init
                 djnz    x,#.loop1
 
                 mov     x,#3
-.loop2
-                mov     cmdout,         #0
+.idleLoop
+                mov     cmdout,         #GO_IDLE_STATE
                 mov     cmdpar,         #0
                 getct   timeout                             ' setup 1s timeout
                 addct1  timeout,        delay1s             ' in case card does not respond
                 call    #do_sdcmd
                 drvh    pinCS
                 waitx   #100
-                djnz    x,#.loop2
+                djnz    x,#.idleLoop
 
 
-                mov     cmdout,         #8                  ' cmd 8, $1aa
-                mov     cmdpar,         #$1AA
+                mov     cmdout,         #SEND_IF_COND
+                mov     cmdpar,         #$1AA  ' this is just by the spec
                 call    #do_sdcmd
                 call    #read_byte                          ' read 32 bit
-                mov     err_out,reply
+                mov     err_out, reply
                 call    #read_byte
                 shl     err_out,#8
                 add     err_out,reply
@@ -305,25 +305,29 @@ card_init
 
                 drvh    pinCS
 
+                bitl    err_out, #16 + (16 << 4)
+                cmp     err_out, #$1AA              wz
+      if_nz     mov     err_out, ##-1
+      if_nz     jmp     #end_cmd
+' Run this loop until the card replies that it is initialized
+' TODO: according to http://elm-chan.org/docs/mmc/mmc_e.html, CMD1 should be used if rejected
+.initLoop       mov     err_out,        ##-40               ' err = card won't init
 
 
-.cmd55          mov     err_out,        ##-40               ' err = card won't init
-
-
-                mov     cmdout,         #55                 ' cmd 55,0
+                mov     cmdout,         #APP_CMD                 ' cmd 55,0
                 mov     cmdpar,         #0
                 call    #do_sdcmd
-                mov     cmdout,         #41                 ' cmd 41, $4000_0000
+                mov     cmdout,         #APP_SEND_OP_COND
                 mov     cmdpar,         ##$4000_0000        '
                 call    #do_sdcmd
                 drvh    pinCS                               ' set cs high
                 cmp     reply,          #$01        wz      ' 01 = idle
 
-        if_z    jmp     #.cmd55
+        if_z    jmp     #.initLoop
 
 
-
-                mov     cmdout,         #58                 ' cmd 58, 0
+' operating voltage range,
+                mov     cmdout,         #READ_OCR
                 mov     cmdpar,         #0
                 call    #do_sdcmd
                 call    #read_byte
@@ -343,9 +347,8 @@ card_init
                 call    #read_byte
                 drvh    pinCS    ' set cs high
 
-
-                mov     cmdout,         #16                 ' cmd 16, $200
-                mov     cmdpar,         ##$200
+                mov     cmdout,         #16                 ' cmd 16, BLOCKSIZE
+                mov     cmdpar,         ##sectorsize
                 call    #do_sdcmd
                 drvh    pinCS    ' set cs high
 
@@ -409,7 +412,7 @@ read_byte
                 waitx   #14
                 rcl     reply, #1
 .end_read
-                RET
+                ret
 
 
 dat 'sd_busy
@@ -424,7 +427,6 @@ read_resp       call    #read_byte
                 cmp     reply,          #$ff        wz
    'if_z         call    #check_time
    if_z         jmp     #read_resp
-                debug("got response!")
 read_resp_ret   ret
 
 dat 'sd_busy
@@ -438,8 +440,6 @@ check_time      pollct1                             wc
 DAT 'reserved and assigned data
 x           long    0 'for RJA
 
-con512 long 512
-
 
 rq_done long 0 ' cog location to clear
 
@@ -449,10 +449,8 @@ pinDO       res 1       ' do
 pinCLK      res 1       ' clk
 pinDI       res 1       ' di
 pinCS       res 1       ' chip select
-pinLeft     res 1       ' audio left
-pinRight    res 1       ' audio right
 {===== Command Mailbox =====}
-ptr_to_mbox res 1       ' pointer to spin mailbo
+ptr_to_mbox res 1       ' pointer to spin mailbox
 cmd_in      res 1       ' mailbox in
 arg1_in     res 1
 arg2_in     res 1
