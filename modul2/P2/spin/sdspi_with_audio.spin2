@@ -18,11 +18,19 @@ CON
     GO_IDLE_STATE = 0
     APP_CMD = 55
     APP_SEND_OP_COND = 41
+    APP_SET_WR_BLOCK_ERASE_COUNT = 23
     READ_OCR = 58
     SEND_IF_COND = 8
     SET_BLOCKLEN = 16
+    WRITE_BLOCK = 24
+    WRITE_MULTIPLE_BLOCK = 25
 
     OCR_CCS_BIT = 30
+
+    SINGLE_BLOCK_TOKEN = $FE
+    MULTI_BLOCK_TOKEN = $FC
+    STOP_TRAN_TOKEN = $FD
+
 VAR  byte cog
 
 PUB Stop()
@@ -51,6 +59,9 @@ PUB ReadBlock(n, b):r 'n is block#, b is pointer to write to
 
 PUB WriteBlock(n, b):r 'n is block#, b is pointer to read from
     return DoCommand("w", n, b, 0)
+
+PUB write_blocks(n, buffer, count):r 'n is block#, b is pointer to read from, c is number of blocks
+    return DoCommand("W", n, buffer, count)
 
 PUB release():r
     return DoCommand("z",0,0,0)
@@ -105,6 +116,8 @@ get_cmd
         if_z    jmp     #read_a
                 cmp     cmd_in,         #"w"    wz
         if_z    jmp     #write_b
+                cmp     cmd_in,         #"W"    wz
+        if_z    jmp     #write_multi
                 cmp     cmd_in,         #"F"    wz
         if_z    jmp     #read_multi
                 cmp     cmd_in,         #"i"    wz
@@ -247,13 +260,15 @@ read_a          '' arg1 is sd ptr, arg2 is hub
 
 dat ' write_b        'write a sector
 write_b         '' arg1 is sd ptr, arg2 is hub
-                mov     cmdout,         #24                 ' command = block write
+
+
+                mov     cmdout,         #WRITE_BLOCK
                 shl     arg1_in,        blocksh             ' non-hc compatibility
                 mov     cmdpar,         arg1_in             ' sd block address
                 getct   timeout                             ' setup 1s timeout
                 addct1  timeout,        delay1s             ' in case card does not respond
                 call    #do_sdcmd
-                mov     dataout,        #$fe
+                mov     dataout,        #SINGLE_BLOCK_TOKEN
                 call    #send_byte
                 rdfast  #0,             arg2_in
 
@@ -268,6 +283,56 @@ write_b         '' arg1 is sd ptr, arg2 is hub
                 cmp     reply,          #5              wz
     if_nz       mov     err_out,        ##-42               ' err = bwrite timeout
                 call    #sd_busy
+                drvh    pinCS    ' set cs high
+                jmp     #end_cmd
+
+
+dat ' write_multi
+write_multi         '' arg1 is block address, arg2 is hub address, arg3 block count
+                mov     cmdout,         #APP_CMD
+                mov     cmdpar,         #0
+                call    #do_sdcmd
+                mov     cmdout,         #APP_SET_WR_BLOCK_ERASE_COUNT
+                mov     cmdpar,         arg3_in
+                call    #do_sdcmd
+
+                mov     cmdout,         #WRITE_MULTIPLE_BLOCK
+                shl     arg1_in,        blocksh             ' non-hc compatibility
+                mov     cmdpar,         arg1_in             ' sd block address
+                getct   timeout                             ' setup 1s timeout
+                addct1  timeout,        delay1s             ' in case card does not respond
+                call    #do_sdcmd
+
+                ' prepare fifo for reading our data
+                rdfast  #0,             arg2_in
+
+.block_loop
+                mov     dataout,        #MULTI_BLOCK_TOKEN
+                call    #send_byte
+                mov     spare,          ##sectorsize
+.loop           rfbyte  dataout
+                call    #send_byte
+                djnz    spare,          #.loop
+                call    #read_byte
+                call    #read_byte
+                call    #read_resp
+                and     reply,          #$1f
+                cmp     reply,          #5              wz
+    if_nz       jmp     #.error_write_multi
+                call    #sd_busy
+                djnz    arg3_in, #.block_loop
+
+                mov     dataout, #STOP_TRAN_TOKEN
+                call    #send_byte
+                call    #sd_busy
+                drvh    pinCS    ' set cs high
+                mov     err_out, arg3_in ' we return the number of written blocks
+                jmp     #end_cmd
+
+.error_write_multi
+                mov     err_out,        ##-42               ' err = bwrite timeout
+                call    #sd_busy
+                drvh    pinCS    ' set cs high
                 jmp     #end_cmd
 
 dat ' card_init
@@ -311,7 +376,7 @@ card_init
 .initLoop       mov     err_out,        ##-40               ' err = card won't init
 
 
-                mov     cmdout,         #APP_CMD                 ' cmd 55,0
+                mov     cmdout,         #APP_CMD
                 mov     cmdpar,         #0
                 call    #do_sdcmd
                 mov     cmdout,         #APP_SEND_OP_COND
@@ -348,7 +413,7 @@ card_init
                 jmp #end_cmd
 
 read_r3_r7
-                call    #read_byte                          ' read the 32 bit of the R7 result
+                call    #read_byte                          ' read the 32 bit of the R3/R7 result
                 mov     err_out, reply
                 call    #read_byte
                 shl     err_out,#8

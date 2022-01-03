@@ -32,16 +32,17 @@ pub main(): result | earlier, later, td, max_td, i
 
   serial.fstr1(string("mountCard: %d\r\n"), result)
   max_td := 0
-  repeat i from 0 to 5
+  'bytefill(@buffer, 23, 1024)
+  'sd.writeBlock(0, @buffer)
+  repeat i from 0 to 2
     bytefill(@buffer, i, 1024)
     earlier := getct()
-    sd.WriteBlock(i, @buffer)
+    sd.write_blocks(i * 2, @buffer, 2)
     later := getct()
     td := util.timediff(earlier, later)
     max_td #>= td
-    serial.fstr2(string("writeblock - td: %d, max_td: %d\r\n"), td, max_td)
-    'dump_block()
-
+    serial.fstr3(string("writeblocks #%d - td: %d, max_td: %d\r\n"), i, td, max_td)
+  sd.release()
 
 pri dump_block() | offset
   offset := 0
