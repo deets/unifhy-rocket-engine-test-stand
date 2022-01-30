@@ -1,75 +1,55 @@
-#include "datalogger.hh"
-#include "ringbuffer.hh"
-#include "datasampler.hh"
+#include "pins.hpp"
+#include "sdcard.hpp"
+#include "mqtt.hpp"
+#include "events.hpp"
+
+#include "wifi.hpp"
+#include "buttons.hpp"
+#include "smartconfig.hpp"
 
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/spi_master.h>
-#include <nvs_flash.h>
-
-#include <WiFi.h>
 
 extern "C" void app_main();
 
-#define DATA_SAMPLER_TASK_STACK_SIZE 2000
-
-#define MOSI 13
-#define MISO 12
-#define CLK 14
-#define CS 15
-
-#define SSID "SSID"
-#define PASSWORD "PASSWORD"
-#define HOST "192.168.2.105"
-
-// We use the default VSPI
-// pins as found in
-// https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/peripherals/spi_master.html#gpio-matrix-and-io-mux
-// and also in the arduino specific
-// components/arduino/variants/esp32/pins_arduino.h
+#define TAG "main"
 
 namespace {
 
-const int MAINLOOP_WAIT = 100;
-const int WIFI_WAIT = 500;
-
-
-void connect_wifi(WiFiClient& client)
-{
-  ESP_LOGI("main", "connecting to WiFi");
-  WiFi.begin(SSID, PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    vTaskDelay(pdMS_TO_TICKS(WIFI_WAIT));
-    ESP_LOGI("main", "...connecting");
-  }
-  ESP_LOGI("main", "connected");
-
-  const int httpPort = 10000;
-  if (!client.connect(HOST, httpPort)) {
-    ESP_LOGI("main", "connection to host failed");
-    return;
-  }
 }
-
-} // end ns anon
 
 void app_main()
 {
-  nvs_flash_init();
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+  deets::buttons::setup({
+       { PIN_NUM_OTA, deets::buttons::pull_e::UP, deets::buttons::irq_e::NEG }
+    });
 
-  auto data_sampler = std::unique_ptr<DataSampler>(new DataSampler());
+  unifhy::events::buttons::register_button_callback(
+    unifhy::events::buttons::OTA,
+    [](unifhy::events::buttons::button_events_t) {
+      if(deets::wifi::connected())
+      {
+        ESP_LOGI(TAG, "Connected to WIFI, run OTA");
+        //start_ota_task();
+      }
+      else
+      {
+        ESP_LOGI(TAG, "Not connected to WIFI, running smartconfig");
+        deets::smartconfig::run();
+      }
+    }
+    );
 
-  auto sd_card_logger = std::unique_ptr<DataLogger>(new DataLogger(*data_sampler));
+  deets::wifi::setup();
 
-  data_sampler->start();
+  // unifhy::sdcard::SDCardWriter writer;
+  unifhy::mqtt::MQTTClient mqtt_client;
   for( ;; )
   {
-    // if(client.connected())
-    // {
-    //   client.write(wifi_buffer.data(), wifi_buffer.size());
-    // }
-    vTaskDelay(pdMS_TO_TICKS(MAINLOOP_WAIT));
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    mqtt_client.publish("write_rate", "test");
   }
 }
