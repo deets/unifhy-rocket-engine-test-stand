@@ -23,6 +23,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <vector>
 
 //#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
@@ -49,10 +50,21 @@ void toggle_start()
   gpio_set_level(PIN_NUM_START, 0);
 }
 
+ssize_t safe_write(FILE* fd, const void *buf, size_t count)
+{
+  ssize_t n;
+
+  do {
+    n = fwrite(buf, 1, count, fd);
+  } while (n < 0 && errno == EINTR);
+
+  return n;
+}
+
 } // namespace
 
 SDCardWriter::SDCardWriter()
-  : _file(nullptr)
+  : _file_count(0)
 {
     esp_err_t ret;
     // Options for mounting the filesystem.
@@ -105,6 +117,9 @@ SDCardWriter::SDCardWriter()
     }
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, _card);
+
+    _file_count = count_files();
+    ESP_LOGI(TAG, "Found %i files", _file_count);
 }
 
 SDCardWriter::~SDCardWriter()
@@ -115,5 +130,49 @@ SDCardWriter::~SDCardWriter()
     spi_bus_free(spi_host_device_t(_host.slot));
 }
 
+size_t SDCardWriter::count_files()
+{
+  size_t res = 0;
 
-} // namespace
+  struct dirent *ep;
+  auto dp = opendir(s_mount_point);
+
+  if (dp != NULL)
+  {
+    while ((ep = readdir(dp)))
+    {
+      ++res;
+    }
+    closedir(dp);
+  }
+  return res;
+}
+
+std::tuple<std::string, size_t, int64_t, int64_t> SDCardWriter::write_file(const size_t buffer_size, const size_t times)
+{
+  std::vector<uint8_t> buffer(buffer_size);
+  for(size_t count = 0; count < buffer_size; ++count)
+  {
+    buffer[count] = uint8_t(count);
+  }
+
+  std::stringstream ss;
+  ss << MOUNT_POINT << "/log-" << _file_count++ << ".txt";
+  const auto name = ss.str();
+
+  auto file = fopen(name.c_str(), "w");
+  int64_t start = esp_timer_get_time();
+  for(size_t i=0; i < times; ++i)
+  {
+    if(!safe_write(file, buffer.data(), buffer.size()))
+    {
+      ESP_LOGE(TAG, "Error writing file");
+      break;
+    }
+  }
+  int64_t stop = esp_timer_get_time();
+  fclose(file);
+  return std::make_tuple(name, buffer_size * times, start, stop);
+}
+
+} // namespace unifhy::sdcard

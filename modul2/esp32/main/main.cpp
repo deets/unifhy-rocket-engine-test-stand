@@ -11,6 +11,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/spi_master.h>
+#include <sstream>
 
 extern "C" void app_main();
 
@@ -45,11 +46,15 @@ void app_main()
 
   deets::wifi::setup();
 
-  // unifhy::sdcard::SDCardWriter writer;
+  unifhy::sdcard::SDCardWriter writer;
   unifhy::mqtt::MQTTClient mqtt_client;
+
   for( ;; )
   {
     vTaskDelay(pdMS_TO_TICKS(1000));
-    mqtt_client.publish("write_rate", "test");
+    const auto [ name, count, start, end ] = writer.write_file(65536, 5);
+    std::stringstream ss;
+    ss << name << ":count=" << count << ":start=" << start << ":end=" << end;
+    mqtt_client.publish("write_rate", ss.str().c_str());
   }
 }
