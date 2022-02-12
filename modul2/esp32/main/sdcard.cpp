@@ -89,6 +89,8 @@ SDCardWriter::SDCardWriter()
 	.flags = 0,
 	.intr_flags = 0,
     };
+    _host.max_freq_khz = 5000;
+
     ret = spi_bus_initialize(spi_host_device_t(_host.slot), &bus_cfg, SPI_DMA_CHAN);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize bus.");
