@@ -8,7 +8,7 @@ CON 'See end of file for license
     Original spin version by Radical Eye Software Copyright 2008
 }}
     sectorsize =   512
-    spi_clk_max =   5_000_000   ' 20mhz safe
+    spi_clk_max =   25_000_000
     spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
 
 'RJA added multiblock reads and removed smartpin mode to boost speed
@@ -33,7 +33,6 @@ CON
 
   DEBUG_PIN = 22
 
-  CBIT_WAIT = 300_000_000 / spi_clk_max
 VAR
   byte cog
 
@@ -48,9 +47,9 @@ PUB start_explicit( _DO, _CLK, _DI, _CS ) : card_type | domask, dimask
     arg1 :=  _DO | (_CLK << 8) + (_DI << 16) + ( _CS << 24)' pins
     arg2 := getmask(_CLK, _DO) + (getmask(_CLK, _DI) << 4) ' clock masks
     arg2 += spi_clk_inv << 8                               ' clock invert
-    arg3 := GetBitTime(spi_clk_max)                        ' spi bit time
+    arg3 := compute_bit_time(spi_clk_max)                  ' spi bit time
     err := clkfreq
-    cog := coginit(COGEXEC_NEW,@_asm_start,@cmd) + 1 'RJA
+    cog := coginit(COGEXEC_NEW, @_asm_start, @cmd) + 1 'RJA
     if cog
         repeat until cmd <> "i"     ' wait until cog is done reading parameter
         card_type := err            ' arg5 returns card type or returns with error from low level driver
@@ -80,8 +79,8 @@ PUB getMailbox():r
 pub readblocks(n,b,p):r  'use multi-block read n=#blocks to read, b=block#, p=pointer to write to'Note:  Currently have to re-mount after using this...
     return DoCommand("F", n, b, p)   'note:  usage of "n" and "b" is not the same as above...
 
-PRI GetBitTime(max_clkfreq) : bt
-    bt :=((clkfreq / max_clkfreq) /2 )+1   ' SPI bit time
+PRI compute_bit_time(max_clkfreq) : bt
+    bt :=((clkfreq / max_clkfreq) / 2 ) + 1   ' SPI bit time
     if bt < 2                              ' make sure at least sysclock /2
         bt := 2
 
@@ -157,6 +156,7 @@ do_init
                 getbyte pinCLK,         arg1_in,    #1
                 getbyte pinDI,          arg1_in,    #2
                 getbyte pinCS,          arg1_in,    #3
+                mov     bit_wait,       arg3_in
                 mov delay1s, err_out ' clkfreq!
                 jmp     #end_cmd
 
@@ -517,8 +517,6 @@ check_time      pollct1                             wc
 
 DAT 'reserved and assigned data
 x           long    0 'for RJA
-bit_wait    long    CBIT_WAIT
-
 rq_done long 0 ' cog location to clear
 
 ' loaded on init   ''15 longs CHZ code
@@ -527,6 +525,7 @@ pinDO       res 1       ' do
 pinCLK      res 1       ' clk
 pinDI       res 1       ' di
 pinCS       res 1       ' chip select
+
 {===== Command Mailbox =====}
 ptr_to_mbox res 1       ' pointer to spin mailbox
 cmd_in      res 1       ' mailbox in
@@ -536,8 +535,7 @@ arg3_in     res 1
 err_out     res 1
 {=== Timing Variables ===}
 delay1s     res 1
-
-tmp1          res 1
+bit_wait    res 1
 
 'FIT $1C0
                    ''============[ COG VARIABLES - SD BOOT ROM A]========================================

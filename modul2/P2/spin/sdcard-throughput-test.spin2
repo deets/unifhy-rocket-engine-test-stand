@@ -15,7 +15,7 @@ var
   BYTE buffer[1024]
 
 obj
-  sd: "sdspi_with_audio"
+  sd: "deets_sd_spi"
   util: "util"
   serial: "jm_fullduplexserial"
   conf: "configuration"
