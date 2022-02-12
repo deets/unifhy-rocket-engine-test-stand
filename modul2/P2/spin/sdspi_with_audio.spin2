@@ -8,30 +8,34 @@ CON 'See end of file for license
     Original spin version by Radical Eye Software Copyright 2008
 }}
     sectorsize =   512
-    spi_clk_max =   25_000_000   ' 20mhz safe
+    spi_clk_max =   5_000_000   ' 20mhz safe
     spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
 
 'RJA added multiblock reads and removed smartpin mode to boost speed
 'RJA also allows specifying cog # in con section below
 
 CON
-    GO_IDLE_STATE = 0
-    APP_CMD = 55
-    APP_SEND_OP_COND = 41
-    APP_SET_WR_BLOCK_ERASE_COUNT = 23
-    READ_OCR = 58
-    SEND_IF_COND = 8
-    SET_BLOCKLEN = 16
-    WRITE_BLOCK = 24
-    WRITE_MULTIPLE_BLOCK = 25
+  GO_IDLE_STATE = 0
+  APP_CMD = 55
+  APP_SEND_OP_COND = 41
+  APP_SET_WR_BLOCK_ERASE_COUNT = 23
+  READ_OCR = 58
+  SEND_IF_COND = 8
+  SET_BLOCKLEN = 16
+  WRITE_BLOCK = 24
+  WRITE_MULTIPLE_BLOCK = 25
 
-    OCR_CCS_BIT = 30
+  OCR_CCS_BIT = 30
 
-    SINGLE_BLOCK_TOKEN = $FE
-    MULTI_BLOCK_TOKEN = $FC
-    STOP_TRAN_TOKEN = $FD
+  SINGLE_BLOCK_TOKEN = $FE
+  MULTI_BLOCK_TOKEN = $FC
+  STOP_TRAN_TOKEN = $FD
 
-VAR  byte cog
+  DEBUG_PIN = 22
+
+  CBIT_WAIT = 300_000_000 / spi_clk_max
+VAR
+  byte cog
 
 PUB Stop()
     if cog
@@ -83,7 +87,6 @@ PRI GetBitTime(max_clkfreq) : bt
 
 PRI DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
     repeat while cmd <> 0
-    'debug("Pushing command ",udec(_cmd),uhex_long(_arg1, _arg2, _arg3))
     arg1 := _arg1
     arg2 := _arg2
     arg3 := _arg3
@@ -101,6 +104,11 @@ DAT
                 org
 _asm_start      mov     ptr_to_mbox,    ptra                ' save mbox address for later
 
+                drvl #DEBUG_PIN
+                waitx   ##100_000_000
+                drvh #DEBUG_PIN
+                waitx   ##100_000_000
+                drvl #DEBUG_PIN
 get_cmd
                 '' get parameters from spin
                 rdlong cmd_in, ptra wz '
@@ -111,7 +119,6 @@ get_cmd
                 rdlong  arg3_in,        ++ptra
                 rdlong  err_out,        ++ptra              ' dummy read to align err pointer
                 '' decode command
-                'debug("got command ",udec(cmd_in),uhex_long(arg1_in,arg2_in,arg3_in))
                 cmp     cmd_in,         #"r"    wz
         if_z    jmp     #read_a
                 cmp     cmd_in,         #"w"    wz
@@ -150,14 +157,7 @@ do_init
                 getbyte pinCLK,         arg1_in,    #1
                 getbyte pinDI,          arg1_in,    #2
                 getbyte pinCS,          arg1_in,    #3
-                mov pinStart, #56
-                drvl pinStart
-                waitx   #$1f
-                drvh pinStart
-                waitx   #$1f
-                drvl pinStart
-
-                mov delay1s,err_out ' clkfreq!
+                mov delay1s, err_out ' clkfreq!
                 jmp     #end_cmd
 
 
@@ -175,7 +175,7 @@ LoopMulti
                 'read_resp
                 'waitx   ##200
                 call    #read_d
-                cmp     x,#$FF wcz
+                cmp     x, #$FF wcz
         if_e    jmp     #LoopMulti
 
                 mov     spare, ##sectorsize
@@ -190,7 +190,7 @@ LoopMulti
 .end_read
                 rcl     x,#1
                 wfbyte  x
-        djnz    spare,#.loop
+                djnz    spare,#.loop
 
                 call    #read_d
                 call    #read_d
@@ -225,7 +225,6 @@ read_d
 
 DAT 'read_a 'read a block (sector)
 read_a          '' arg1 is sd ptr, arg2 is hub
-                debug("In read func!")
                 mov     cmdout,         #17                 ' command = block read
                 shl     arg1_in,        blocksh             ' non-hc compatibility
                 mov     cmdpar,         arg1_in             ' sd block address
@@ -289,12 +288,12 @@ write_b         '' arg1 is sd ptr, arg2 is hub
 
 dat ' write_multi
 write_multi         '' arg1 is block address, arg2 is hub address, arg3 block count
-                mov     cmdout,         #APP_CMD
-                mov     cmdpar,         #0
-                call    #do_sdcmd
-                mov     cmdout,         #APP_SET_WR_BLOCK_ERASE_COUNT
-                mov     cmdpar,         arg3_in
-                call    #do_sdcmd
+                ' mov     cmdout,         #APP_CMD
+                ' mov     cmdpar,         #0
+                ' call    #do_sdcmd
+                ' mov     cmdout,         #APP_SET_WR_BLOCK_ERASE_COUNT
+                ' mov     cmdpar,         arg3_in
+                ' call    #do_sdcmd
 
                 mov     cmdout,         #WRITE_MULTIPLE_BLOCK
                 shl     arg1_in,        blocksh             ' non-hc compatibility
@@ -313,6 +312,8 @@ write_multi         '' arg1 is block address, arg2 is hub address, arg3 block co
 .loop           rfbyte  dataout
                 call    #send_byte
                 djnz    spare,          #.loop
+                ' always three bytes, two CRC and the last one
+                ' is "data response' in elm-chan.org
                 call    #read_byte
                 call    #read_byte
                 call    #read_resp
@@ -321,9 +322,15 @@ write_multi         '' arg1 is block address, arg2 is hub address, arg3 block co
     if_nz       jmp     #.error_write_multi
                 call    #sd_busy
                 djnz    arg3_in, #.block_loop
-
+                ' this is subtle: after the STOP_TRAN_TOKEN we
+                ' need to pump out one more byte before waiting for busy
+                ' to end. This is in the graphic in the "Multiple Block Write"
+                ' section on elm-chan.org, and in the ESP32 driver.
                 mov     dataout, #STOP_TRAN_TOKEN
                 call    #send_byte
+                mov     dataout, #$ff
+                call    #send_byte
+
                 call    #sd_busy
                 drvh    pinCS    ' set cs high
                 mov     err_out, arg3_in ' we return the number of written blocks
@@ -466,9 +473,9 @@ send_byte
                 rcl     dataout,       #1      wc
                 drvl    pinCLK
                 drvc    pinDI
-                waitx   #12 'rja moved this down one
+                waitx   bit_wait
                 drvh    pinCLK
-                waitx   #12
+                waitx   bit_wait
 .end_send
         _ret_   drvh    pinDI
 
@@ -477,10 +484,10 @@ read_byte
                 mov     reply,#0
                 rep     @.end_read, #8
                 drvl    pinCLK
-                waitx   #14     '' !! 13 safe for up to 160 mhz, 14 for 320mhz
+                waitx   bit_wait
                 testp   pinDO  wc
                 drvh    pinCLK
-                waitx   #14
+                waitx   bit_wait
                 rcl     reply, #1
 .end_read
                 ret
@@ -510,7 +517,7 @@ check_time      pollct1                             wc
 
 DAT 'reserved and assigned data
 x           long    0 'for RJA
-
+bit_wait    long    CBIT_WAIT
 
 rq_done long 0 ' cog location to clear
 
@@ -520,7 +527,6 @@ pinDO       res 1       ' do
 pinCLK      res 1       ' clk
 pinDI       res 1       ' di
 pinCS       res 1       ' chip select
-pinStart    res 1
 {===== Command Mailbox =====}
 ptr_to_mbox res 1       ' pointer to spin mailbox
 cmd_in      res 1       ' mailbox in
@@ -582,13 +588,6 @@ arg1    long 0
 arg2    long 0
 arg3    long 0
 err     long 0
-
-subcode long 0
-
-{
-var    '' multi spin mailbox
-long  cmd, arg1, arg2, arg3, arg4, err
-}
 
 CON 'MIT License Terms
 {{
