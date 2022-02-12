@@ -12,6 +12,7 @@
 #include <freertos/task.h>
 #include <driver/spi_master.h>
 #include <sstream>
+#include <condition_variable>
 
 extern "C" void app_main();
 
@@ -28,13 +29,17 @@ void app_main()
        { PIN_NUM_OTA, deets::buttons::pull_e::UP, deets::buttons::irq_e::NEG }
     });
 
+  std::mutex m;
+  std::condition_variable cv;
+
+
   unifhy::events::buttons::register_button_callback(
     unifhy::events::buttons::OTA,
-    [](unifhy::events::buttons::button_events_t) {
+    [&cv](unifhy::events::buttons::button_events_t) {
       if(deets::wifi::connected())
       {
-        ESP_LOGI(TAG, "Connected to WIFI, run OTA");
-        //start_ota_task();
+        ESP_LOGI(TAG, "Connected to WIFI, run write");
+        cv.notify_one();
       }
       else
       {
@@ -51,8 +56,9 @@ void app_main()
 
   for( ;; )
   {
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    const auto [ name, count, start, end ] = writer.write_file(65536, 5);
+    std::unique_lock<std::mutex> lk(m);
+    cv.wait(lk);
+    const auto [ name, count, start, end ] = writer.write_file(2048, 5);
     std::stringstream ss;
     ss << name << ":count=" << count << ":start=" << start << ":end=" << end;
     mqtt_client.publish("write_rate", ss.str().c_str());
