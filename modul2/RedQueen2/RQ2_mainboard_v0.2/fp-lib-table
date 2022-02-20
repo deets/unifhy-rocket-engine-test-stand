@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name RQ2_mainboard_v0.2)(type KiCad)(uri "$(KIPRJMOD)/RQ2_mainboard_v0.2.pretty")(options "")(descr ""))
+)
