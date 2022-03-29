@@ -23,8 +23,8 @@ CON
   READ_OCR = 58
   SEND_IF_COND = 8
   SET_BLOCKLEN = 16
-  WRITE_BLOCK = 24
-  WRITE_MULTIPLE_BLOCK = 25
+  CMD_WRITE_BLOCK = 24
+  CMD_WRITE_MULTIPLE_BLOCK = 25
 
   OCR_CCS_BIT = 30
 
@@ -262,7 +262,7 @@ dat ' write_b        'write a sector
 write_b         '' arg1 is sd ptr, arg2 is hub
 
 
-                mov     cmdout,         #WRITE_BLOCK
+                mov     cmdout,         #CMD_WRITE_BLOCK
                 shl     arg1_in,        blocksh             ' non-hc compatibility
                 mov     cmdpar,         arg1_in             ' sd block address
                 getct   timeout                             ' setup 1s timeout
@@ -296,7 +296,7 @@ write_multi         '' arg1 is block address, arg2 is hub address, arg3 block co
                 ' mov     cmdpar,         arg3_in
                 ' call    #do_sdcmd
 
-                mov     cmdout,         #WRITE_MULTIPLE_BLOCK
+                mov     cmdout,         #CMD_WRITE_MULTIPLE_BLOCK
                 shl     arg1_in,        blocksh             ' non-hc compatibility
                 mov     cmdpar,         arg1_in             ' sd block address
                 getct   timeout                             ' setup 1s timeout
