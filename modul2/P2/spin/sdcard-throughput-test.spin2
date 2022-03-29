@@ -16,7 +16,8 @@ obj
 pub main(): result | td, max_td, cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
   serial.fstr0(string("begin\r\n"))
-  result := sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS)
+  result := sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED)
+
   serial.fstr1(string("start_explicit: %d\r\n"), result)
   result := sd.mount_card()
   if result <> 2

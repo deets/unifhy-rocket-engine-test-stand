@@ -7,9 +7,6 @@ CON 'See end of file for license
     Original spin version by Radical Eye Software Copyright 2008
 }}
     sectorsize =   512
-    ' on the P2 eval board, 15_000_000 was the
-    ' maximum speed I could achieve
-    spi_clk_max =   15_000_000
     spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
 
 'RJA added multiblock reads and removed smartpin mode to boost speed
@@ -40,13 +37,13 @@ PUB Stop()
         cogstop(cog-1)
     cog := 0
 
-PUB start_explicit( _DO, _CLK, _DI, _CS ) | domask, dimask
+PUB start_explicit( _DO, _CLK, _DI, _CS, _spi_speed ) | domask, dimask
     stop()
     cmd := "i"   'set flag to know if the started cog has read its parameters
     arg1 :=  _DO | (_CLK << 8) + (_DI << 16) + ( _CS << 24)' pins
     arg2 := getmask(_CLK, _DO) + (getmask(_CLK, _DI) << 4) ' clock masks
     arg2 += spi_clk_inv << 8                               ' clock invert
-    arg3 := compute_bit_time(spi_clk_max)                  ' spi bit time
+    arg3 := compute_bit_time(_spi_speed)                  ' spi bit time
     err := clkfreq                                         ' delay1s
     cog := coginit(COGEXEC_NEW, @_asm_start, @cmd) + 1 'RJA
     if cog

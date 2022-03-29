@@ -19,6 +19,9 @@ con
   SD_CS = 60
   SD_CLK = 61
   SD_STATUS_PIN = 25
+  ' on the P2 eval board, 15_000_000 was the
+  ' maximum speed I could achieve
+  SD_SPI_SPEED = 15_000_000
 
   CAPTURE_SWITCH = 27
 
@@ -33,6 +36,7 @@ con
   SD_DI = 59
   SD_CS = 60
   SD_CLK = 61
+  SD_SPI_SPEED = 15_000_000
 
   DEBUG_PIN = 22
 
