@@ -53,45 +53,45 @@ PUB start_explicit( _DO, _CLK, _DI, _CS ) : card_type | domask, dimask
         repeat until cmd <> "i"     ' wait until cog is done reading parameter
         card_type := err            ' arg5 returns card type or returns with error from low level driver
 
-PUB mountCard():r
-   return DoCommand("c", 0, 0, 0)
+PUB mount_card():r
+   return do_command("c", 0, 0, 0)
 
-PUB ReadBlock(n, b):r 'n is block#, b is pointer to write to
-    return DoCommand("r", n, b, 0)
+PUB read_block(n, b):r 'n is block#, b is pointer to write to
+    return do_command("r", n, b, 0)
 
-PUB WriteBlock(n, b):r 'n is block#, b is pointer to read from
-    return DoCommand("w", n, b, 0)
+PUB write_block(n, b):r 'n is block#, b is pointer to read from
+    return do_command("w", n, b, 0)
 
 PUB write_blocks(n, buffer, count):r 'n is block#, b is pointer to read from, c is number of blocks
-    return DoCommand("W", n, buffer, count)
+    return do_command("W", n, buffer, count)
 
 PUB release():r
-    return DoCommand("z",0,0,0)
+    return do_command("z",0,0,0)
 
-PUB GetCog():r
+PUB get_cog():r
     return cog
 
-PUB getMailbox():r
+PUB get_mailbox():r
     return @cmd
 
 
 pub readblocks(n,b,p):r  'use multi-block read n=#blocks to read, b=block#, p=pointer to write to'Note:  Currently have to re-mount after using this...
-    return DoCommand("F", n, b, p)   'note:  usage of "n" and "b" is not the same as above...
+    return do_command("F", n, b, p)   'note:  usage of "n" and "b" is not the same as above...
 
 PRI compute_bit_time(max_clkfreq) : bt
     bt :=((clkfreq / max_clkfreq) / 2 ) + 1   ' SPI bit time
     if bt < 2                              ' make sure at least sysclock /2
         bt := 2
 
-PRI DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
+PRI do_command_async(_cmd, _arg1, _arg2, _arg3)
     repeat while cmd <> 0
     arg1 := _arg1
     arg2 := _arg2
     arg3 := _arg3
     cmd  := _cmd
 
-PRI DoCommand(_cmd, _arg1, _arg2, _arg3):r
-    DoCommandAsync(_cmd, _arg1, _arg2, _arg3)
+PRI do_command(_cmd, _arg1, _arg2, _arg3):r
+    do_command_async(_cmd, _arg1, _arg2, _arg3)
     repeat until cmd == 0
     return err
 
