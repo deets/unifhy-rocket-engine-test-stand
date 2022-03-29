@@ -122,7 +122,7 @@ get_cmd
                 cmp     cmd_in,         #"i"    wz
         if_z    jmp     #do_init
                 cmp     cmd_in,         #"c"    wz
-        if_z    call    #card_init
+        if_z    call    #mount_card_asm
                 cmp     cmd_in,         #"z"    wz
         if_z    jmp     #card_release
                 mov     err_out,        #5                  ' err = no command                 '
@@ -335,8 +335,8 @@ write_multi         '' arg1 is block address, arg2 is hub address, arg3 block co
                 drvh    pinCS    ' set cs high
                 jmp     #end_cmd
 
-dat ' card_init
-card_init
+dat
+mount_card_asm
 
                 drvh    pinCS
                 drvh    pinCLK
