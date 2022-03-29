@@ -32,8 +32,6 @@ CON
   MULTI_BLOCK_TOKEN = $FC
   STOP_TRAN_TOKEN = $FD
 
-  DEBUG_PIN = 22
-
 VAR
   byte cog
 
@@ -104,11 +102,6 @@ DAT
                 org
 _asm_start      mov     ptr_to_mbox,    ptra                ' save mbox address for later
 
-                drvl #DEBUG_PIN
-                waitx   ##100_000_000
-                drvh #DEBUG_PIN
-                waitx   ##100_000_000
-                drvl #DEBUG_PIN
 get_cmd
                 '' get parameters from spin
                 rdlong cmd_in, ptra wz '
