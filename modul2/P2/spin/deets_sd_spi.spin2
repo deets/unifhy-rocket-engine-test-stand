@@ -40,18 +40,17 @@ PUB Stop()
         cogstop(cog-1)
     cog := 0
 
-PUB start_explicit( _DO, _CLK, _DI, _CS ) : card_type | domask, dimask
+PUB start_explicit( _DO, _CLK, _DI, _CS ) | domask, dimask
     stop()
     cmd := "i"   'set flag to know if the started cog has read its parameters
     arg1 :=  _DO | (_CLK << 8) + (_DI << 16) + ( _CS << 24)' pins
     arg2 := getmask(_CLK, _DO) + (getmask(_CLK, _DI) << 4) ' clock masks
     arg2 += spi_clk_inv << 8                               ' clock invert
     arg3 := compute_bit_time(spi_clk_max)                  ' spi bit time
-    err := clkfreq
+    err := clkfreq                                         ' delay1s
     cog := coginit(COGEXEC_NEW, @_asm_start, @cmd) + 1 'RJA
     if cog
         repeat until cmd <> "i"     ' wait until cog is done reading parameter
-        card_type := err            ' arg5 returns card type or returns with error from low level driver
 
 PUB mount_card():r
    return do_command("c", 0, 0, 0)
