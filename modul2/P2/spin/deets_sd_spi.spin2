@@ -1,10 +1,9 @@
 CON 'See end of file for license
-{{   SDSPI driver for P2-ES  ASM RC4 - SMARTPINS!
-        SDSPI ASM for P2 v_0_1_0
-    by Cheezus Slice - Joe Heinz - 2019
+{{   SDSPI driver for P2
+    2022, Diez Roggisch, deets@web.de
+
+    Originally by Cheezus Slice - Joe Heinz - 2019
     Cheezus Slice (Joe Heinz)  -   July - 2019
-        cheezusslicedj@gmail.com
-    Thanks to all those out there in forum land!
     Original spin version by Radical Eye Software Copyright 2008
 }}
     sectorsize =   512
