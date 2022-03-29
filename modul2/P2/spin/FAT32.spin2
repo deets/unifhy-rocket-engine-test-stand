@@ -108,7 +108,7 @@ VAR long dataStructureAddress[0] 'note when cleared long[182] is used but it's l
   long tmp
 
 OBJ
-    sdspi: "sdspi_with_audio"
+    sdspi: "deets_sd_spi"
 
 
 PUB readByte() : result
@@ -1409,7 +1409,7 @@ PUB unmountPartition() : result
 
 ''/////////////////////////////////////////////////////////////////////////////////////////////////
 
-PUB FATEngineStart(DOPin, CLKPin, DIPin, CSPin, readOnly) : result
+PUB start(DOPin, CLKPin, DIPin, CSPin, SPISpeed, readOnly) : result
 
 '' ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 '' // Starts up the SDC driver running on a cog and checks out a lock for the driver.
@@ -1426,7 +1426,7 @@ PUB FATEngineStart(DOPin, CLKPin, DIPin, CSPin, readOnly) : result
 '' // CSPin - The SPI chip select pin from the SD card. Between 0 and 31.
 '' ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  FATEngineStop()
+  stop()
 
  ' setup the initialisation parameters to be passed to the pasm cog at cognew
   readTimeout  := (clkfreq / 10)
@@ -1443,16 +1443,16 @@ PUB FATEngineStart(DOPin, CLKPin, DIPin, CSPin, readOnly) : result
   SPIShiftAddress := @cardSPIShift
 
   cardLockID := locknew() +1                            ' get a lock
-  sdspi.start_explicit(DOPin, CLKPin, DIPin, CSPin)
-  cardCogID  := sdspi.getCog()
+  sdspi.start_explicit(DOPin, CLKPin, DIPin, CSPin, SPISpeed)
+  cardCogID  := sdspi.get_cog()
 
-  if (cardLockID and cardCogID)
-    return(cardCogID)                                   ' cog+1 on success
+  if cardLockID and cardCogID
+    return cardCogID                                   ' cog+1 on success
+  else
+    stop()
+    return -1
 
-  FATEngineStop()
-  return(-1)
-
-PUB FATEngineStop() : result
+PUB stop() : result
 
 '' ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 '' // Shuts down the SDC driver running on a cog and returns the lock used by the driver.
@@ -1496,6 +1496,7 @@ PRI findBreak(stringPointer) : result
 
 PRI findSlash(stringPointer) : result
   return findNumber(byte[stringPointer], "/", "\")
+' Comment to just undo a font locking bug: "
 
 PRI findNumber(thisNumber, thatNumber, otherNumber) : result
   return ((thisNumber == thatNumber) or (thisNumber == otherNumber))
@@ -2045,9 +2046,9 @@ PRI readWriteBlock(address, command) : result
     "W": pinhigh(FAT_BLK_W)
 
   case command
-    "R": cardErrorFlag := sdspi.readBlock(cardSectorAddress, cardBlockAddress)
-    "W": cardErrorFlag := sdspi.writeBlock(cardSectorAddress, cardBlockAddress)
-    "M": cardErrorFlag := sdspi.mountCard()
+    "R": cardErrorFlag := sdspi.read_block(cardSectorAddress, cardBlockAddress)
+    "W": cardErrorFlag := sdspi.write_block(cardSectorAddress, cardBlockAddress)
+    "M": cardErrorFlag := sdspi.mount_card()
     "O": 'cardErrorFlag := sdspi.release()
     other: abortError(Invalid_Call)
 

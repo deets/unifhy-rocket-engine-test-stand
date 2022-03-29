@@ -1,0 +1,45 @@
+con
+  _clkfreq = 300_000_000
+
+  DEBUG_BAUD  = 2_000_000
+
+  BUFFER_SIZE = 65536
+var
+  BYTE buffer[BUFFER_SIZE]
+
+obj
+  fat: "FAT32"
+  util: "util"
+  serial: "jm_fullduplexserial"
+  conf: "configuration"
+
+pub main(): result | cmd
+  serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
+  banner()
+  result := fat.start(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED, 0)
+  if result == -1
+    serial.fstr0(string("Error starting"))
+    repeat
+
+  repeat
+    cmd := prompt()
+
+pri prompt() : result
+  serial.tx(">")
+  serial.tx(" ")
+  repeat
+
+pri toggle_debug()
+  pinlow(conf.DEBUG_PIN)
+  waitms(10)
+  pinhigh(conf.DEBUG_PIN)
+  waitms(10)
+  pinlow(conf.DEBUG_PIN)
+
+pri nl()
+  serial.tx(13)
+  serial.tx(10)
+
+pri banner()
+  serial.fstr0(string("#########################################\r\n#                                       #\r\n# FAT Explorer - (C) 2022 Diez Roggisch #\r\n#                                       #\r\n#########################################\r\n"))
+  nl()
