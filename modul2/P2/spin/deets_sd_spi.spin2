@@ -7,7 +7,9 @@ CON 'See end of file for license
     Original spin version by Radical Eye Software Copyright 2008
 }}
     sectorsize =   512
-    spi_clk_max =   25_000_000
+    ' on the P2 eval board, 15_000_000 was the
+    ' maximum speed I could achieve
+    spi_clk_max =   15_000_000
     spi_clk_inv =   1           ' 1 inverted, 0 non-inverted
 
 'RJA added multiblock reads and removed smartpin mode to boost speed
