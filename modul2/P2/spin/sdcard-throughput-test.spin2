@@ -3,8 +3,9 @@ con
 
   DEBUG_BAUD  = 2_000_000
 
+  BUFFER_SIZE = 65536
 var
-  BYTE buffer[1024]
+  BYTE buffer[BUFFER_SIZE]
 
 obj
   sd: "deets_sd_spi"
@@ -12,9 +13,9 @@ obj
   serial: "jm_fullduplexserial"
   conf: "configuration"
 
-pub main(): result | earlier, later, td, max_td, i
+pub main(): result | td, max_td, cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
-
+  serial.fstr0(string("begin\r\n"))
   result := sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS)
   serial.fstr1(string("start_explicit: %d\r\n"), result)
   result := sd.mount_card()
@@ -24,20 +25,64 @@ pub main(): result | earlier, later, td, max_td, i
 
   serial.fstr1(string("mountCard: %d\r\n"), result)
   max_td := 0
-  'bytefill(@buffer, 23, 1024)
-  'sd.writeBlock(0, @buffer)
   repeat
-    repeat until serial.rxcheck() <> -1
-    serial.fstr0(string("writeblocks"))
-    repeat i from 0 to 2
-      bytefill(@buffer, i, 1024)
-      earlier := getct()
-      sd.write_blocks(i * 2, @buffer, 2)
-      later := getct()
-      td := util.timediff(earlier, later)
-      max_td #>= td
-      serial.fstr3(string("writeblocks #%d - td: %d, max_td: %d\r\n"), i, td, max_td)
+    repeat until serial.available() <> 0
+    cmd := serial.rx()
+    case cmd
+      "w": td := write_block()
+      "r": td := read_block()
+      "W": td := write_blocks()
+    '   '"R": td := read_blocks()
+    max_td #>= td
+    serial.fstr2(string("td: %d, max_td: %d\r\n"), td, max_td)
+
   sd.release()
+
+pri write_block(): td | earlier, later
+    serial.fstr0(string("write_block\r\n"))
+    bytefill(@buffer, 123, BUFFER_SIZE)
+    toggle_debug()
+    earlier := getct()
+    sd.write_block(1234, @buffer)
+    later := getct()
+    td := util.timediff(earlier, later)
+    return td
+
+pri write_blocks(): td | earlier, later
+    serial.fstr0(string("write_blocks\r\n"))
+    bytefill(@buffer, 123, 512)
+    bytefill(@buffer + 512, $aa, 512)
+    toggle_debug()
+    earlier := getct()
+    sd.write_blocks(4567, @buffer, 2)
+    later := getct()
+    td := util.timediff(earlier, later)
+    return td
+
+pri read_block(): td | earlier, later
+    serial.fstr0(string("read_block\r\n"))
+    toggle_debug()
+    earlier := getct()
+    sd.read_block(1234, @buffer)
+    later := getct()
+    td := util.timediff(earlier, later)
+    return td
+
+pri toggle_debug()
+    pinlow(conf.DEBUG_PIN)
+    waitms(10)
+    pinhigh(conf.DEBUG_PIN)
+    waitms(10)
+    pinlow(conf.DEBUG_PIN)
+
+' pri read_blocks(): td
+'     serial.fstr0(string("read_blocks"))
+'     earlier := getct()
+'     sd.read_blocks(1234, @buffer)
+'     later := getct()
+'     td := util.timediff(earlier, later)
+'     return td
+
 
 pri dump_block() | offset
   offset := 0
