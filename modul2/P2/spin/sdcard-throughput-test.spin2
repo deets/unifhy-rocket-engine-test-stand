@@ -3,14 +3,6 @@ con
 
   DEBUG_BAUD  = 2_000_000
 
-  ' P2 Eval Board Assignment
-  SD_DO = 58
-  SD_DI = 59
-  SD_CS = 60
-  SD_CLK = 61
-  '
-  SD_STATUS_PIN = 25
-
 var
   BYTE buffer[1024]
 
@@ -22,8 +14,8 @@ obj
 
 pub main(): result | earlier, later, td, max_td, i
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
-  result := sd.start_explicit(SD_DO, SD_CLK, SD_DI, SD_CS)
 
+  result := sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS)
   serial.fstr1(string("start_explicit: %d\r\n"), result)
   result := sd.mount_card()
   if result <> 2

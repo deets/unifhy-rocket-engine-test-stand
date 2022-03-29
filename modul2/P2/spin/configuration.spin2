@@ -22,7 +22,20 @@ con
 
   CAPTURE_SWITCH = 27
 
-#ELSEIFDEF UNIFHY
+  DEBUG_PIN = 22
+
+#ELSEIFDEF UNIHFY
+
+  RX0     = 24
+  TX0     = 25
+  BR_SERIAL = 2_000_000
+  SD_DO = 58
+  SD_DI = 59
+  SD_CS = 60
+  SD_CLK = 61
+
+  DEBUG_PIN = 22
+
 #ELSE
 #ERROR "Please specify target board - P2EVAL or UNIHFY"
 #ENDIF
