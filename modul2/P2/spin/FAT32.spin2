@@ -1376,6 +1376,7 @@ PUB mountPartition(partition) : result | cardType
 
     mountedUnmountedFlag := true
     unlockFileSystem()
+    result := 0
 
 PUB unmountPartition() : result
 

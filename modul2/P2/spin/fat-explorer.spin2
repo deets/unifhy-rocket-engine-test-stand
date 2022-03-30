@@ -6,6 +6,8 @@ con
   BUFFER_SIZE = 65536
 var
   BYTE buffer[BUFFER_SIZE]
+  BYTE input_buffer[256]
+  LONG input_position
 
 obj
   fat: "FAT32"
@@ -15,19 +17,33 @@ obj
 
 pub main(): result | cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
+  send := @serial.fstr0
   banner()
   result := fat.start(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED, 0)
   if result == -1
     serial.fstr0(string("Error starting"))
     repeat
 
+  result := \fat.mountPartition(0)
+  if result <> 0
+    serial.fstr1(string("Error mounting: %s\r\n"), result)
+    repeat
+
   repeat
     cmd := prompt()
+    case cmd
+      "l": list()
+      other: unknown()
+
 
 pri prompt() : result
   serial.tx(">")
   serial.tx(" ")
   repeat
+    result := serial.rxcheck()
+    if result <> -1
+      return result
+
 
 pri toggle_debug()
   pinlow(conf.DEBUG_PIN)
@@ -39,6 +55,12 @@ pri toggle_debug()
 pri nl()
   serial.tx(13)
   serial.tx(10)
+
+pri list()
+  serial.fstr0(string("amazing directory contents listing\r\n"))
+
+pri unknown()
+  serial.fstr0(string("unknown command\r\n"))
 
 pri banner()
   serial.fstr0(string("#########################################\r\n#                                       #\r\n# FAT Explorer - (C) 2022 Diez Roggisch #\r\n#                                       #\r\n#########################################\r\n"))
