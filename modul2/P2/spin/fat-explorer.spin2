@@ -32,17 +32,25 @@ pub main(): result | cmd
   repeat
     cmd := prompt()
     case cmd
+      0 :
       "l": list()
-      other: unknown()
+      other: unknown(cmd)
 
 
-pri prompt() : result
+pri prompt() : result | char
   serial.tx(">")
   serial.tx(" ")
+  result := 0
   repeat
-    result := serial.rxcheck()
-    if result <> -1
-      return result
+    char := serial.rxcheck()
+    if char <> -1
+      ' produce echo
+      if char <> 13  ' CR
+        serial.tx(char)
+        result := char
+      else
+        nl()
+        return result
 
 
 pri toggle_debug()
@@ -56,11 +64,16 @@ pri nl()
   serial.tx(13)
   serial.tx(10)
 
-pri list()
-  serial.fstr0(string("amazing directory contents listing\r\n"))
+pri list() | name
+  repeat
+    fat.listEntries("N")
+    name := fat.listName()
+    if strsize(name) == 0
+      quit
+    serial.fstr1(@"%s\r\n", name)
 
-pri unknown()
-  serial.fstr0(string("unknown command\r\n"))
+pri unknown(cmd)
+  serial.fstr0(@"unknown command\r\n")
 
 pri banner()
   serial.fstr0(string("#########################################\r\n#                                       #\r\n# FAT Explorer - (C) 2022 Diez Roggisch #\r\n#                                       #\r\n#########################################\r\n"))
