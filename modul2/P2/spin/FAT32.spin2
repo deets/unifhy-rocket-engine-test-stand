@@ -478,6 +478,7 @@ PUB openFile(filePathName, mode) : result | readWriteAppend
       currentPosition := currentSize
       currentByte := (currentPosition - 1)
     readWriteCurrentSector("R")
+    result := 0
   unlockFileSystem()
 
 PUB changeDirectory(directoryPathName) : result
