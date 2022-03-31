@@ -4,16 +4,21 @@ con
   DEBUG_BAUD  = 2_000_000
 
   BUFFER_SIZE = 65536
+  INPUT_BUFFER_SIZE = 256
+  SECTOR_SIZE = 512
 var
   BYTE buffer[BUFFER_SIZE]
-  BYTE input_buffer[256]
+  BYTE input_buffer[INPUT_BUFFER_SIZE]
+  BYTE arg1[INPUT_BUFFER_SIZE]
+  BYTE sector[SECTOR_SIZE]
   LONG input_position
-
+  BYTE echo
 obj
   fat: "FAT32"
   util: "util"
   serial: "jm_fullduplexserial"
   conf: "configuration"
+
 
 pub main(): result | cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
@@ -30,11 +35,19 @@ pub main(): result | cmd
     repeat
 
   repeat
+    reset_input_buffer()
     cmd := prompt()
     case cmd
       0 :
       "l": list()
+      "e": toggle_echo()
+      "d": dump()
       other: unknown(cmd)
+
+
+pri reset_input_buffer()
+    input_position := 0
+    bytefill(@input_buffer, 0, INPUT_BUFFER_SIZE)
 
 
 pri prompt() : result | char
@@ -44,13 +57,100 @@ pri prompt() : result | char
   repeat
     char := serial.rxcheck()
     if char <> -1
+      if echo
+        serial.dec(char)
       ' produce echo
       if char <> 13  ' CR
         serial.tx(char)
-        result := char
+        input_buffer[input_position] := char
+        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
       else
         nl()
-        return result
+        return input_buffer[0]
+
+
+pri dump() | err
+  ' we insist on a space
+  ' between the command an the argument
+  input_position := 1
+  if skip_space() == 0
+    error()
+    return
+  input_position := 2
+  ' we do have a filename!
+  if get_arg(@arg1) > 0
+    strupper(@arg1)
+    err := \fat.openFile(@arg1, "R")
+    if err <> 0
+      serial.fstr0(err)
+      nl()
+    else
+      dump_open_file()
+
+
+pri dump_open_file() | count, i
+  serial.fstr0(@"-----------------\r\n")
+  repeat
+    count := fat.readData(@sector, SECTOR_SIZE)
+    if count == 0
+      quit
+    repeat i from 0 to count - 1
+      serial.tx(sector[i])
+  serial.fstr0(@"\r\n-----------------\r\n")
+
+pri strupper(buf) | i, c
+  ' changes all characters to upper case
+  ' assumes 0 as termination!
+  repeat i from 0 to INPUT_BUFFER_SIZE - 1
+    c := BYTE[buf][i]
+    if c == 0
+      quit
+    if isalpha(c)
+      BYTE[buf][i] := c & %11011111
+
+
+pri isalpha(c) : result
+  return c >= "A" and c <= "z"
+
+
+pri skip_space() : result
+  ' skip spaces in the input buffer and return the amount
+  result := 0
+  repeat while result + input_position < INPUT_BUFFER_SIZE and input_buffer[result + input_position] == " "
+    ++result
+  input_position += result
+  return result
+
+
+pri get_arg(buf) : i | c
+  i := 0
+  repeat while input_position < INPUT_BUFFER_SIZE
+    c := input_buffer[input_position]
+    if c <> " " and c <> 0
+      ' This bit me in the ass. Using normal
+      ' assignment would result in LONGs being
+      ' written. Only through the BYTE redirection
+      ' this works. Which makes sense.
+      BYTE[buf][i++] := c
+      ++input_position
+    else
+      quit
+  buf[i] := 0 ' terminating 0
+  return i
+
+
+pri error()
+  serial.fstr0(@"error\r\n")
+
+
+pri toggle_echo()
+  echo := not echo
+  serial.fstr0(@"ascii echo ")
+  if echo
+    serial.fstr0(@"on")
+  else
+    serial.fstr0(@"off")
+  nl()
 
 
 pri toggle_debug()
@@ -70,7 +170,7 @@ pri list() | name
     name := fat.listName()
     if strsize(name) == 0
       quit
-    serial.fstr1(@"%s\r\n", name)
+    serial.fstr2(@"%s %d\r\n", name, fat.listSize())
 
 pri unknown(cmd)
   serial.fstr0(@"unknown command\r\n")
