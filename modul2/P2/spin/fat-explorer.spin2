@@ -40,6 +40,7 @@ pub main(): result | cmd
     case cmd
       0 :
       "l": list()
+      "i": info()
       "e": toggle_echo()
       "d": dump()
       other: unknown(cmd)
@@ -97,6 +98,26 @@ pri dump_open_file() | count, i
     repeat i from 0 to count - 1
       serial.tx(sector[i])
   serial.fstr0(@"\r\n-----------------\r\n")
+
+
+pri list() | name
+  repeat
+    fat.listEntries("N")
+    name := fat.listName()
+    if strsize(name) == 0
+      quit
+    serial.fstr2(@"%s %d\r\n", name, fat.listSize())
+
+
+pri info() | spc
+    spc := fat.partitionSectorsPerCluster()
+    serial.fstr1(@"Sectors/Cluster: %d\r\n", spc)
+    spc := fat.partitionCountOfClusters()
+    serial.fstr1(@"Partition Cluster Count: %d\r\n", spc)
+
+
+pri unknown(cmd)
+  serial.fstr0(@"unknown command\r\n")
 
 pri strupper(buf) | i, c
   ' changes all characters to upper case
@@ -163,17 +184,6 @@ pri toggle_debug()
 pri nl()
   serial.tx(13)
   serial.tx(10)
-
-pri list() | name
-  repeat
-    fat.listEntries("N")
-    name := fat.listName()
-    if strsize(name) == 0
-      quit
-    serial.fstr2(@"%s %d\r\n", name, fat.listSize())
-
-pri unknown(cmd)
-  serial.fstr0(@"unknown command\r\n")
 
 pri banner()
   serial.fstr0(string("#########################################\r\n#                                       #\r\n# FAT Explorer - (C) 2022 Diez Roggisch #\r\n#                                       #\r\n#########################################\r\n"))
