@@ -39,23 +39,71 @@ pri mainloop() | cmd
       0 :
       "e": toggle_echo()
       "d": dump()
+      "h": help()
+      "f": fill()
       other: unknown(cmd)
 
 
-pri dump() | err, block_number
-  ' we insist on a space
-  ' between the command an the argument
-  input_position := 1
-  if skip_space() == 0
-    error()
+pri help()
+  serial.fstr0(@"Command help:\r\n")
+  serial.fstr0(@"\r\n")
+  serial.fstr0(@"h          - This message.\r\n")
+  serial.fstr0(@"d <number> - Dump contents of block/sector <number>.\r\n")
+  serial.fstr0(@"             If <number> is X, dump our write buffer.\r\n")
+  serial.fstr0(@"d <number> - Dump contents of block/sector <number>.\r\n")
+  serial.fstr0(@"f <text>   - Fill the 64KB write buffer with this fragment.\r\n")
+  serial.fstr0(@"             Repeat until full.\r\n")
+  serial.fstr0(@"v          - Verify mode (read back after write) on.\r\n")
+
+
+pri fill() | offset, size
+  if not numer_of_args() == 1
+    serial.fstr0(@"fill takes one argument, <blocknumber>\r\n")
     return
-  input_position := 2
+
+  offset := 0
+  if get_arg(@arg1) > 0
+    size := strsize(@arg1)
+    serial.fstr1(@"arg size: %d\r\n", size)
+    repeat
+      repeat size
+        buffer[offset] := arg1[offset +// size]
+        ++offset
+        if offset == BUFFER_SIZE
+          quit
+      if offset == BUFFER_SIZE
+        quit
+
+
+pri dump() | err, block_number
+  if not numer_of_args() == 1
+    serial.fstr0(@"dump takes one argument, <blocknumber>\r\n")
+    return
   ' we do have a block number!
   if get_arg(@arg1) > 0
-    block_number := toint(@arg1)
-    serial.fstr1(@"dumping block %d\r\n", block_number)
-    read_block(block_number)
-    dump_block(@read_block_buffer)
+    if arg1[0] == "X"
+      repeat block_number from 0 to (BUFFER_SIZE / 512) - 1
+        dump_block(@buffer + block_number * 512)
+    else
+      block_number := toint(@arg1)
+      serial.fstr1(@"dumping block %d\r\n", block_number)
+      read_block(block_number)
+      dump_block(@read_block_buffer)
+
+
+pri numer_of_args(): result
+  result := 0
+  ' we insist on a space
+  ' between the command an the first argument
+  input_position := 1
+  if skip_space() > 0
+    repeat until skip_not_space_or_null() == 0
+      result++
+      input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
+  ' reset the input_position here for possible
+  ' get_arg calls.
+  input_position := 2
+  return result
 
 
 pri write_block(): td | earlier, later
@@ -110,17 +158,13 @@ pri toint(buf): result | i, c
   c := BYTE[buf][i++]
   repeat until c == 0
     result *= 10
-    if isnumeric(c)
+    if util.isnumeric(c)
       result += c - "0"
     else
       quit
     c := BYTE[buf][i++]
 
   return result
-
-
-pri isnumeric(c): result
-  return c >= "0" and c <= "9"
 
 
 pri toggle_echo()
@@ -134,6 +178,14 @@ pri toggle_echo()
 
 
 pri prompt() : result | char
+  ' Will fill the input_buffer with characters
+  ' until <return> is pressed. Will place a trailing
+  ' 0 into the buffer.
+  ' Returns the first character for quick command
+  ' dispatch.
+  '
+  ' ATTENTION: just wraps around if you type more than
+  ' INPUT_BUFFER_SIZE!
   serial.tx(">")
   serial.tx(" ")
   result := 0
@@ -149,6 +201,8 @@ pri prompt() : result | char
         input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
       else
         nl()
+        input_buffer[input_position] := 0
+        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
         return input_buffer[0]
 
 
@@ -161,6 +215,22 @@ pri skip_space() : result
   result := 0
   repeat while result + input_position < INPUT_BUFFER_SIZE and input_buffer[result + input_position] == " "
     ++result
+  input_position += result
+  return result
+
+
+pri skip_not_space_or_null() : result | c
+  ' skip anything that's not a space/0
+  result := 0
+  repeat
+    if result + input_position >= INPUT_BUFFER_SIZE
+      quit
+    c := input_buffer[result + input_position]
+    if c <> " " and c <> 0
+      ++result
+    else
+      quit
+
   input_position += result
   return result
 
@@ -186,15 +256,23 @@ pri error()
   serial.fstr0(@"error\r\n")
 
 
-pri dump_block(buf) | offset
+pri dump_block(buf) | offset, copy, c
   offset := 0
   repeat 32
+    copy := offset
     repeat 16
       serial.fhex(BYTE[buf][offset++], 2)
+    serial.tx(" ")
+    repeat 16
+      c := BYTE[buf][copy++]
+      if util.isalpha(c) or util.isnumeric(c)
+        serial.tx(c)
+      else
+        serial.tx(".")
     nl()
   nl()
 
 
 pri banner()
-  serial.fstr0(@"#######################################################\r\n#                                                     #\r\n# SD Card Throughput Test - (C) 2022 Diez B. Roggisch #\r\n#                                                     #\r\n#######################################################\r\n")
+  serial.fstr0(@"#######################################################\r\n#                                                     #\r\n# SD Card Throughput Test - (C) 2022 Diez B. Roggisch #\r\n#                                                     #\r\n#   Press h <enter> for help                          #\r\n#                                                     #\r\n#######################################################\r\n")
   nl()

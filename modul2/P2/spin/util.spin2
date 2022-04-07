@@ -56,3 +56,9 @@ pub timediff(earlier, later): result
   result := later - earlier
   if result +> 2147483648
     result := $ffffffff - result + 1
+
+pub isalpha(c) : result
+  return c >= "A" and c <= "z"
+
+pub isnumeric(c): result
+  return c >= "0" and c <= "9"
