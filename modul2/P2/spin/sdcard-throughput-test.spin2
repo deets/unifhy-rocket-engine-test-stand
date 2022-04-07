@@ -4,8 +4,15 @@ con
   DEBUG_BAUD  = 2_000_000
 
   BUFFER_SIZE = 65536
+  INPUT_BUFFER_SIZE = 256
+
 var
   BYTE buffer[BUFFER_SIZE]
+  BYTE read_block_buffer[512]
+  LONG input_position
+  BYTE input_buffer[INPUT_BUFFER_SIZE]
+  BYTE arg1[INPUT_BUFFER_SIZE]
+  BYTE echo
 
 obj
   sd: "deets_sd_spi"
@@ -15,29 +22,41 @@ obj
 
 pub main(): result | td, max_td, cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
-  serial.fstr0(string("begin\r\n"))
-  result := sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED)
-
-  serial.fstr1(string("start_explicit: %d\r\n"), result)
+  banner()
+  sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED)
   result := sd.mount_card()
   if result <> 2
-    serial.fstr1(string("unknown card: %d\r\n"), result)
+    serial.fstr1(string("Unknown card: %d - can't mount!\r\n"), result)
     repeat
+  mainloop()
 
-  serial.fstr1(string("mountCard: %d\r\n"), result)
-  max_td := 0
+
+pri mainloop() | cmd
   repeat
-    repeat until serial.available() <> 0
-    cmd := serial.rx()
+    reset_input_buffer()
+    cmd := prompt()
     case cmd
-      "w": td := write_block()
-      "r": td := read_block()
-      "W": td := write_blocks()
-    '   '"R": td := read_blocks()
-    max_td #>= td
-    serial.fstr2(string("td: %d, max_td: %d\r\n"), td, max_td)
+      0 :
+      "e": toggle_echo()
+      "d": dump()
+      other: unknown(cmd)
 
-  sd.release()
+
+pri dump() | err, block_number
+  ' we insist on a space
+  ' between the command an the argument
+  input_position := 1
+  if skip_space() == 0
+    error()
+    return
+  input_position := 2
+  ' we do have a block number!
+  if get_arg(@arg1) > 0
+    block_number := toint(@arg1)
+    serial.fstr1(@"dumping block %d\r\n", block_number)
+    read_block(block_number)
+    dump_block(@read_block_buffer)
+
 
 pri write_block(): td | earlier, later
     serial.fstr0(string("write_block\r\n"))
@@ -48,6 +67,7 @@ pri write_block(): td | earlier, later
     later := getct()
     td := util.timediff(earlier, later)
     return td
+
 
 pri write_blocks(): td | earlier, later
     serial.fstr0(string("write_blocks\r\n"))
@@ -60,14 +80,10 @@ pri write_blocks(): td | earlier, later
     td := util.timediff(earlier, later)
     return td
 
-pri read_block(): td | earlier, later
-    serial.fstr0(string("read_block\r\n"))
-    toggle_debug()
-    earlier := getct()
-    sd.read_block(1234, @buffer)
-    later := getct()
-    td := util.timediff(earlier, later)
-    return td
+
+pri read_block(number): td | earlier, later
+    sd.read_block(number, @read_block_buffer)
+
 
 pri toggle_debug()
     pinlow(conf.DEBUG_PIN)
@@ -76,23 +92,109 @@ pri toggle_debug()
     waitms(10)
     pinlow(conf.DEBUG_PIN)
 
-' pri read_blocks(): td
-'     serial.fstr0(string("read_blocks"))
-'     earlier := getct()
-'     sd.read_blocks(1234, @buffer)
-'     later := getct()
-'     td := util.timediff(earlier, later)
-'     return td
-
-
-pri dump_block() | offset
-  offset := 0
-  repeat 32
-    repeat 16
-      serial.fhex(@buffer + offset, 2)
-      offset += 1
-    nl()
 
 pri nl()
   serial.tx(13)
   serial.tx(10)
+
+
+pri reset_input_buffer()
+    input_position := 0
+    bytefill(@input_buffer, 0, INPUT_BUFFER_SIZE)
+
+
+pri toint(buf): result | i, c
+  i := 0
+  result := 0
+
+  c := BYTE[buf][i++]
+  repeat until c == 0
+    result *= 10
+    if isnumeric(c)
+      result += c - "0"
+    else
+      quit
+    c := BYTE[buf][i++]
+
+  return result
+
+
+pri isnumeric(c): result
+  return c >= "0" and c <= "9"
+
+
+pri toggle_echo()
+  echo := not echo
+  serial.fstr0(@"ascii echo ")
+  if echo
+    serial.fstr0(@"on")
+  else
+    serial.fstr0(@"off")
+  nl()
+
+
+pri prompt() : result | char
+  serial.tx(">")
+  serial.tx(" ")
+  result := 0
+  repeat
+    char := serial.rxcheck()
+    if char <> -1
+      if echo
+        serial.dec(char)
+      ' produce echo
+      if char <> 13  ' CR
+        serial.tx(char)
+        input_buffer[input_position] := char
+        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
+      else
+        nl()
+        return input_buffer[0]
+
+
+pri unknown(cmd)
+  serial.fstr0(@"unknown command\r\n")
+
+
+pri skip_space() : result
+  ' skip spaces in the input buffer and return the amount
+  result := 0
+  repeat while result + input_position < INPUT_BUFFER_SIZE and input_buffer[result + input_position] == " "
+    ++result
+  input_position += result
+  return result
+
+
+pri get_arg(buf) : i | c
+  i := 0
+  repeat while input_position < INPUT_BUFFER_SIZE
+    c := input_buffer[input_position]
+    if c <> " " and c <> 0
+      ' This bit me in the ass. Using normal
+      ' assignment would result in LONGs being
+      ' written. Only through the BYTE redirection
+      ' this works. Which makes sense.
+      BYTE[buf][i++] := c
+      ++input_position
+    else
+      quit
+  buf[i] := 0 ' terminating 0
+  return i
+
+
+pri error()
+  serial.fstr0(@"error\r\n")
+
+
+pri dump_block(buf) | offset
+  offset := 0
+  repeat 32
+    repeat 16
+      serial.fhex(BYTE[buf][offset++], 2)
+    nl()
+  nl()
+
+
+pri banner()
+  serial.fstr0(@"#######################################################\r\n#                                                     #\r\n# SD Card Throughput Test - (C) 2022 Diez B. Roggisch #\r\n#                                                     #\r\n#######################################################\r\n")
+  nl()
