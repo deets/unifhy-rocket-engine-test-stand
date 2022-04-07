@@ -1284,21 +1284,22 @@ PUB mountPartition(partition) : result | cardType
     lockFileSystem("R")
 
     readWriteBlock(@cardType, "M")
-''    bytemove(@CIDRegisterCopy, @CIDRegister, 16)
     readWriteBlock(0, "R")
 
     if(((blockToLong(54) & $FF_FF_FF) <> $54_41_46) and ((blockToLong(82) & $FF_FF_FF) <> $54_41_46))
       if(blockToWord(510) <> $AA_55)
         abortError(File_System_Corrupted)
 
-      partition := ((partition & $3) << 4)
-      case blockToByte(450 + partition)
-        $4, $6, $B .. $C, $E, $14, $16, $1B .. $1C, $1E:
-        other: abortError(File_System_Unsupported)
+    partition := ((partition & $3) << 4)
+    case blockToByte(450 + partition)
+      $4, $6, $B .. $C, $E, $14, $16, $1B .. $1C, $1E:
+      other: abortError(File_System_Unsupported)
 
-      diskSignature := blockToLong(440)
-      hiddenSectors := blockToLong(454 + partition)
-      readWriteBlock(0, "R")
+    diskSignature := blockToLong(440)
+    hiddenSectors := blockToLong(454 + partition)
+    ' Now that the hidden sectors are set,
+    ' this reads the actual volume id
+    readWriteBlock(0, "R")
 
     bytemove(@OEMName, addressOfBlock(3), 8)
 
