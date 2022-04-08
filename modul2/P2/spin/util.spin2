@@ -62,3 +62,18 @@ pub isalpha(c) : result
 
 pub isnumeric(c): result
   return c >= "0" and c <= "9"
+
+pub strupper(s) | i, c
+  ' changes all characters to upper case
+  ' assumes 0 as termination!
+  i := 0
+  repeat
+    c := BYTE[s][i]
+    if c == 0
+      quit
+    BYTE[s][i++] := uppercase(c)
+
+pub uppercase(c) : result
+  if isalpha(c)
+      return c & %11011111
+  return c

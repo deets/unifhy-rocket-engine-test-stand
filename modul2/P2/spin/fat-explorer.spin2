@@ -80,7 +80,7 @@ pri dump() | err
   input_position := 2
   ' we do have a filename!
   if get_arg(@arg1) > 0
-    strupper(@arg1)
+    util.strupper(@arg1)
     err := \fat.openFile(@arg1, "R")
     if err <> 0
       serial.fstr0(err)
@@ -118,16 +118,6 @@ pri info() | spc
 
 pri unknown(cmd)
   serial.fstr0(@"unknown command\r\n")
-
-pri strupper(buf) | i, c
-  ' changes all characters to upper case
-  ' assumes 0 as termination!
-  repeat i from 0 to INPUT_BUFFER_SIZE - 1
-    c := BYTE[buf][i]
-    if c == 0
-      quit
-    if isalpha(c)
-      BYTE[buf][i] := c & %11011111
 
 
 pri isalpha(c) : result
