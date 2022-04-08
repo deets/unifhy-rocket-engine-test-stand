@@ -12,6 +12,7 @@ var
   LONG input_position
   BYTE input_buffer[INPUT_BUFFER_SIZE]
   BYTE arg1[INPUT_BUFFER_SIZE]
+  BYTE arg2[INPUT_BUFFER_SIZE]
   BYTE echo, verify
 
 obj
@@ -69,12 +70,13 @@ pri help()
   serial.fstr0(@"             read back and verified against the write buffer.\r\n")
 
 
-pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms, to_write
+pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms, to_write, verify_start
   if not numer_of_args() == 2
     serial.fstr0(@"write test takes two arguments, <s> and <l>\r\n")
     return
   get_arg(@arg1)
   start := toint(@arg1)
+  verify_start := start
   get_arg(@arg1)
   length := toint(@arg1)
   serial.fstr3(@"Writing %s from block %d, length: %d\r\n", single_block ? @"single" : @"multiple", start, length)
@@ -105,11 +107,31 @@ pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms
 
   ms := elapsed / 1000
   serial.fstr3(@"Wrote %d bytes in %dus, %dms\r\n", length * 512, elapsed, ms)
+  if verify
+    verify_blockdata(verify_start, length)
+
+
+pri verify_blockdata(start, length) | buffer_offset, differ, offset
+  buffer_offset := 0
+  repeat length
+    read_block(start++)
+    differ, offset := block_and_buffer_differ(@buffer + buffer_offset)
+    if differ == 1
+      serial.fstr2(@"Verification failed at %d, buffer_offset: %d\r\n", --start, buffer_offset + offset)
+      return
+    buffer_offset := (buffer_offset + 512) +// BUFFER_SIZE
+
+
+pri block_and_buffer_differ(buffer_address): result | i
+  repeat i from 0 to 511
+    if BYTE[buffer_address][i] <> read_block_buffer[i]
+      return 1, i
+  return 0, 0
 
 
 pri fill() | offset, size
   if not numer_of_args() == 1
-    serial.fstr0(@"fill takes one argument, <blocknumber>\r\n")
+    serial.fstr0(@"fill takes one argument, <pattern>\r\n")
     return
 
   offset := 0
@@ -125,19 +147,28 @@ pri fill() | offset, size
         quit
 
 
-pri dump() | err, block_number
-  if not numer_of_args() == 1
-    serial.fstr0(@"dump takes one argument, <blocknumber>\r\n")
+pri dump() | err, block_number, nargs, count
+  nargs := numer_of_args()
+  if nargs < 1 or nargs > 2
+    serial.fstr0(@"dump takes arguments, <blocknumber> [<count>]\r\n")
     return
   ' we do have a block number!
-  if get_arg(@arg1) > 0
-    if util.uppercase(arg1[0]) == "X"
-      repeat block_number from 0 to (BUFFER_SIZE / 512) - 1
-        dump_block(@buffer + block_number * 512)
-    else
-      block_number := toint(@arg1)
-      serial.fstr1(@"dumping block %d\r\n", block_number)
-      read_block(block_number)
+  get_arg(@arg1)
+  if nargs == 2
+    get_arg(@arg2)
+    count := toint(@arg2)
+  else
+    count := (BUFFER_SIZE / 512) - 1
+  if util.uppercase(arg1[0]) == "X"
+    repeat block_number from 0 to count - 1
+      dump_block(@buffer + block_number * 512)
+  else
+    block_number := toint(@arg1)
+    if nargs == 1
+      count := 1
+    serial.fstr1(@"dumping block %d\r\n", block_number)
+    repeat count
+      read_block(block_number++)
       dump_block(@read_block_buffer)
 
 
