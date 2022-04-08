@@ -12,7 +12,7 @@ var
   LONG input_position
   BYTE input_buffer[INPUT_BUFFER_SIZE]
   BYTE arg1[INPUT_BUFFER_SIZE]
-  BYTE echo
+  BYTE echo, verify
 
 obj
   sd: "deets_sd_spi"
@@ -21,6 +21,8 @@ obj
   conf: "configuration"
 
 pub main(): result | td, max_td, cmd
+  echo := 0
+  verify := 0
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
   banner()
   sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED)
@@ -34,13 +36,16 @@ pub main(): result | td, max_td, cmd
 pri mainloop() | cmd
   repeat
     reset_input_buffer()
-    cmd := prompt()
+    cmd := prompt(verify ? "V" : "-")
     case cmd
       0 :
       "e": toggle_echo()
+      "v": toggle_verify()
       "d": dump()
       "h": help()
       "f": fill()
+      "w": write_test(1)
+      "W": write_test(0)
       other: unknown(cmd)
 
 
@@ -54,6 +59,52 @@ pri help()
   serial.fstr0(@"f <text>   - Fill the 64KB write buffer with this fragment.\r\n")
   serial.fstr0(@"             Repeat until full.\r\n")
   serial.fstr0(@"v          - Verify mode (read back after write) on.\r\n")
+  serial.fstr0(@"w <s> <l>  - Write test, single block. Arguments see below.\r\n")
+  serial.fstr0(@"W <s> <l>  - Write test, multiple block. Arguments see below.\r\n")
+  nl()
+  serial.fstr0(@"             Both tests write the write buffer from block <s>.\r\n")
+  serial.fstr0(@"             for <l> blocks.\r\n")
+  serial.fstr0(@"             They print out the MBit/seconds this took.\r\n")
+  serial.fstr0(@"             If verify mode (V>-prompt) is on, the data is.\r\n")
+  serial.fstr0(@"             read back and verified against the write buffer.\r\n")
+
+
+pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms, to_write
+  if not numer_of_args() == 2
+    serial.fstr0(@"write test takes two arguments, <s> and <l>\r\n")
+    return
+  get_arg(@arg1)
+  start := toint(@arg1)
+  get_arg(@arg1)
+  length := toint(@arg1)
+  serial.fstr3(@"Writing %s from block %d, length: %d\r\n", single_block ? @"single" : @"multiple", start, length)
+  buffer_pos := 0
+  elapsed := 0
+  usdiv := clkfreq / 1_000_000
+
+  if single_block
+    repeat length
+      ts := cnt()
+      sd.write_block(start++, @buffer + buffer_pos)
+      elapsed += util.timediff(ts, cnt()) / usdiv
+      buffer_pos := (buffer_pos + 512) +// BUFFER_SIZE
+  else
+    to_write := length
+    repeat until to_write == 0
+      if to_write >= BUFFER_SIZE / 512
+        ts := cnt()
+        sd.write_blocks(start, @buffer, BUFFER_SIZE / 512)
+        elapsed += util.timediff(ts, cnt()) / usdiv
+        start += BUFFER_SIZE / 512
+        to_write -= BUFFER_SIZE / 512
+      else
+        ts := cnt()
+        sd.write_blocks(start, @buffer, to_write)
+        elapsed += util.timediff(ts, cnt()) / usdiv
+        to_write := 0
+
+  ms := elapsed / 1000
+  serial.fstr3(@"Wrote %d bytes in %dus, %dms\r\n", length * 512, elapsed, ms)
 
 
 pri fill() | offset, size
@@ -64,7 +115,6 @@ pri fill() | offset, size
   offset := 0
   if get_arg(@arg1) > 0
     size := strsize(@arg1)
-    serial.fstr1(@"arg size: %d\r\n", size)
     repeat
       repeat size
         buffer[offset] := arg1[offset +// size]
@@ -81,7 +131,7 @@ pri dump() | err, block_number
     return
   ' we do have a block number!
   if get_arg(@arg1) > 0
-    if arg1[0] == "X"
+    if util.uppercase(arg1[0]) == "X"
       repeat block_number from 0 to (BUFFER_SIZE / 512) - 1
         dump_block(@buffer + block_number * 512)
     else
@@ -177,7 +227,11 @@ pri toggle_echo()
   nl()
 
 
-pri prompt() : result | char
+pri toggle_verify()
+  verify := not verify
+
+
+pri prompt(mode) : result | char
   ' Will fill the input_buffer with characters
   ' until <return> is pressed. Will place a trailing
   ' 0 into the buffer.
@@ -186,6 +240,7 @@ pri prompt() : result | char
   '
   ' ATTENTION: just wraps around if you type more than
   ' INPUT_BUFFER_SIZE!
+  serial.tx(mode)
   serial.tx(">")
   serial.tx(" ")
   result := 0
@@ -248,7 +303,10 @@ pri get_arg(buf) : i | c
       ++input_position
     else
       quit
-  buf[i] := 0 ' terminating 0
+  ' same here... doh!
+  BYTE[buf][i] := 0 ' terminating 0
+  ' place input_position on the next agument
+  skip_space()
   return i
 
 
