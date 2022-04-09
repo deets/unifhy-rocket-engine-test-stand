@@ -4,8 +4,8 @@
 #main-file="spin/ads-test.spin2"
 #main-file="spin/fat-test.spin2"
 #main-file="spin/numerical-test.spin2"
-#main-file="spin/fat-explorer.spin2"
-main-file="spin/sdcard-throughput-test.spin2"
+main-file="spin/fat-explorer.spin2"
+#main-file="spin/sdcard-throughput-test.spin2"
 libraries=[
 ]
 

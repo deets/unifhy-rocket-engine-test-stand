@@ -4,12 +4,10 @@ con
   DEBUG_BAUD  = 2_000_000
 
   BUFFER_SIZE = 65536
-  INPUT_BUFFER_SIZE = 256
   SECTOR_SIZE = 512
 var
   BYTE buffer[BUFFER_SIZE]
-  BYTE input_buffer[INPUT_BUFFER_SIZE]
-  BYTE arg1[INPUT_BUFFER_SIZE]
+  BYTE arg1[command.INPUT_BUFFER_SIZE]
   BYTE sector[SECTOR_SIZE]
   LONG input_position
   BYTE echo
@@ -18,7 +16,7 @@ obj
   util: "util"
   serial: "jm_fullduplexserial"
   conf: "configuration"
-
+  command: "command"
 
 pub main(): result | cmd
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
@@ -35,13 +33,12 @@ pub main(): result | cmd
     repeat
 
   repeat
-    reset_input_buffer()
+    command.reset_input_buffer()
     cmd := prompt()
     case cmd
       0 :
       "l": list()
       "i": info()
-      "e": toggle_echo()
       "d": dump()
       other: unknown(cmd)
 
@@ -51,42 +48,23 @@ pri reset_input_buffer()
     bytefill(@input_buffer, 0, INPUT_BUFFER_SIZE)
 
 
-pri prompt() : result | char
+pri prompt() : result
   serial.tx(">")
   serial.tx(" ")
-  result := 0
-  repeat
-    char := serial.rxcheck()
-    if char <> -1
-      if echo
-        serial.dec(char)
-      ' produce echo
-      if char <> 13  ' CR
-        serial.tx(char)
-        input_buffer[input_position] := char
-        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
-      else
-        nl()
-        return input_buffer[0]
+  return command.read_input(@serial.rxcheck, @serial.tx)
 
 
 pri dump() | err
-  ' we insist on a space
-  ' between the command an the argument
-  input_position := 1
-  if skip_space() == 0
-    error()
-    return
-  input_position := 2
-  ' we do have a filename!
-  if get_arg(@arg1) > 0
-    util.strupper(@arg1)
-    err := \fat.openFile(@arg1, "R")
-    if err <> 0
-      serial.fstr0(err)
-      nl()
-    else
-      dump_open_file()
+  if command.number_of_args() <> 1
+    serial.fstr0(@"dump takes an argument <filename>\r\n")
+  command.get_arg(@arg1)
+  util.strupper(@arg1)
+  err := \fat.openFile(@arg1, "R")
+  if err <> 0
+    serial.fstr0(err)
+    nl()
+  else
+    dump_open_file()
 
 
 pri dump_open_file() | count, i
@@ -120,48 +98,8 @@ pri unknown(cmd)
   serial.fstr0(@"unknown command\r\n")
 
 
-pri isalpha(c) : result
-  return c >= "A" and c <= "z"
-
-
-pri skip_space() : result
-  ' skip spaces in the input buffer and return the amount
-  result := 0
-  repeat while result + input_position < INPUT_BUFFER_SIZE and input_buffer[result + input_position] == " "
-    ++result
-  input_position += result
-  return result
-
-
-pri get_arg(buf) : i | c
-  i := 0
-  repeat while input_position < INPUT_BUFFER_SIZE
-    c := input_buffer[input_position]
-    if c <> " " and c <> 0
-      ' This bit me in the ass. Using normal
-      ' assignment would result in LONGs being
-      ' written. Only through the BYTE redirection
-      ' this works. Which makes sense.
-      BYTE[buf][i++] := c
-      ++input_position
-    else
-      quit
-  buf[i] := 0 ' terminating 0
-  return i
-
-
 pri error()
   serial.fstr0(@"error\r\n")
-
-
-pri toggle_echo()
-  echo := not echo
-  serial.fstr0(@"ascii echo ")
-  if echo
-    serial.fstr0(@"on")
-  else
-    serial.fstr0(@"off")
-  nl()
 
 
 pri toggle_debug()
