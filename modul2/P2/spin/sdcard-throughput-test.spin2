@@ -4,25 +4,24 @@ con
   DEBUG_BAUD  = 2_000_000
 
   BUFFER_SIZE = 131072
-  INPUT_BUFFER_SIZE = 256
 
 var
   BYTE buffer[BUFFER_SIZE]
   BYTE read_block_buffer[512]
-  LONG input_position
-  BYTE input_buffer[INPUT_BUFFER_SIZE]
-  BYTE arg1[INPUT_BUFFER_SIZE]
-  BYTE arg2[INPUT_BUFFER_SIZE]
-  BYTE echo, verify
+  BYTE verify
   LONG actual_buffer_size
+
+  BYTE arg1[command.INPUT_BUFFER_SIZE]
+  BYTE arg2[command.INPUT_BUFFER_SIZE]
+
 obj
   sd: "deets_sd_spi"
   util: "util"
   serial: "jm_fullduplexserial"
   conf: "configuration"
+  command: "command"
 
 pub main(): result | td, max_td, cmd
-  echo := 0
   verify := 0
   actual_buffer_size := BUFFER_SIZE / 512
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
@@ -37,11 +36,10 @@ pub main(): result | td, max_td, cmd
 
 pri mainloop() | cmd
   repeat
-    reset_input_buffer()
+    command.reset_input_buffer()
     cmd := prompt(verify ? "V" : "-")
     case cmd
       0 :
-      "e": toggle_echo()
       "v": toggle_verify()
       "d": dump()
       "h": help()
@@ -81,23 +79,23 @@ pri info()
 
 
 pri set_actual_buffer_size()
-  if not numer_of_args() == 1
+  if not command.number_of_args() == 1
     serial.fstr0(@"Set buffer size takes one arguments, <blocks>\r\n")
     return
-  get_arg(@arg1)
-  actual_buffer_size := toint(@arg1) <# (BUFFER_SIZE / 512)
+  command.get_arg(@arg1)
+  actual_buffer_size := util.toint(@arg1) <# (BUFFER_SIZE / 512)
   info()
 
 
 pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms, to_write, verify_start
-  if not numer_of_args() == 2
+  if not command.number_of_args() == 2
     serial.fstr0(@"write test takes two arguments, <s> and <l>\r\n")
     return
-  get_arg(@arg1)
-  start := toint(@arg1)
+  command.get_arg(@arg1)
+  start := util.toint(@arg1)
   verify_start := start
-  get_arg(@arg1)
-  length := toint(@arg1)
+  command.get_arg(@arg1)
+  length := util.toint(@arg1)
   serial.fstr3(@"Writing %s from block %d, length: %d\r\n", single_block ? @"single" : @"multiple", start, length)
   buffer_pos := 0
   elapsed := 0
@@ -149,12 +147,12 @@ pri block_and_buffer_differ(buffer_address): result | i
 
 
 pri fill() | offset, size
-  if not numer_of_args() == 1
+  if not command.number_of_args() == 1
     serial.fstr0(@"fill takes one argument, <pattern>\r\n")
     return
 
   offset := 0
-  if get_arg(@arg1) > 0
+  if command.get_arg(@arg1) > 0
     size := strsize(@arg1)
     repeat
       repeat size
@@ -167,43 +165,28 @@ pri fill() | offset, size
 
 
 pri dump() | err, block_number, nargs, count
-  nargs := numer_of_args()
+  nargs := command.number_of_args()
   if nargs < 1 or nargs > 2
     serial.fstr0(@"dump takes arguments, <blocknumber> [<count>]\r\n")
     return
   ' we do have a block number!
-  get_arg(@arg1)
+  command.get_arg(@arg1)
   if nargs == 2
-    get_arg(@arg2)
-    count := toint(@arg2)
+    command.get_arg(@arg2)
+    count := util.toint(@arg2)
   else
     count := actual_buffer_size
   if util.uppercase(arg1[0]) == "X"
     repeat block_number from 0 to count - 1
       dump_block(@buffer + block_number * 512)
   else
-    block_number := toint(@arg1)
+    block_number := util.toint(@arg1)
     if nargs == 1
       count := 1
     serial.fstr1(@"dumping block %d\r\n", block_number)
     repeat count
       read_block(block_number++)
       dump_block(@read_block_buffer)
-
-
-pri numer_of_args(): result
-  result := 0
-  ' we insist on a space
-  ' between the command an the first argument
-  input_position := 1
-  if skip_space() > 0
-    repeat until skip_not_space_or_null() == 0
-      result++
-      input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
-  ' reset the input_position here for possible
-  ' get_arg calls.
-  input_position := 2
-  return result
 
 
 pri write_block(): td | earlier, later
@@ -246,42 +229,11 @@ pri nl()
   serial.tx(10)
 
 
-pri reset_input_buffer()
-    input_position := 0
-    bytefill(@input_buffer, 0, INPUT_BUFFER_SIZE)
-
-
-pri toint(buf): result | i, c
-  i := 0
-  result := 0
-
-  c := BYTE[buf][i++]
-  repeat until c == 0
-    result *= 10
-    if util.isnumeric(c)
-      result += c - "0"
-    else
-      quit
-    c := BYTE[buf][i++]
-
-  return result
-
-
-pri toggle_echo()
-  echo := not echo
-  serial.fstr0(@"ascii echo ")
-  if echo
-    serial.fstr0(@"on")
-  else
-    serial.fstr0(@"off")
-  nl()
-
-
 pri toggle_verify()
   verify := not verify
 
 
-pri prompt(mode) : result | char
+pri prompt(mode) : result
   ' Will fill the input_buffer with characters
   ' until <return> is pressed. Will place a trailing
   ' 0 into the buffer.
@@ -293,71 +245,10 @@ pri prompt(mode) : result | char
   serial.tx(mode)
   serial.tx(">")
   serial.tx(" ")
-  result := 0
-  repeat
-    char := serial.rxcheck()
-    if char <> -1
-      if echo
-        serial.dec(char)
-      ' produce echo
-      if char <> 13  ' CR
-        serial.tx(char)
-        input_buffer[input_position] := char
-        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
-      else
-        nl()
-        input_buffer[input_position] := 0
-        input_position := (input_position + 1) +// INPUT_BUFFER_SIZE
-        return input_buffer[0]
-
+  return command.read_input(@serial.rxcheck, @serial.tx)
 
 pri unknown(cmd)
   serial.fstr0(@"unknown command\r\n")
-
-
-pri skip_space() : result
-  ' skip spaces in the input buffer and return the amount
-  result := 0
-  repeat while result + input_position < INPUT_BUFFER_SIZE and input_buffer[result + input_position] == " "
-    ++result
-  input_position += result
-  return result
-
-
-pri skip_not_space_or_null() : result | c
-  ' skip anything that's not a space/0
-  result := 0
-  repeat
-    if result + input_position >= INPUT_BUFFER_SIZE
-      quit
-    c := input_buffer[result + input_position]
-    if c <> " " and c <> 0
-      ++result
-    else
-      quit
-
-  input_position += result
-  return result
-
-
-pri get_arg(buf) : i | c
-  i := 0
-  repeat while input_position < INPUT_BUFFER_SIZE
-    c := input_buffer[input_position]
-    if c <> " " and c <> 0
-      ' This bit me in the ass. Using normal
-      ' assignment would result in LONGs being
-      ' written. Only through the BYTE redirection
-      ' this works. Which makes sense.
-      BYTE[buf][i++] := c
-      ++input_position
-    else
-      quit
-  ' same here... doh!
-  BYTE[buf][i] := 0 ' terminating 0
-  ' place input_position on the next agument
-  skip_space()
-  return i
 
 
 pri error()

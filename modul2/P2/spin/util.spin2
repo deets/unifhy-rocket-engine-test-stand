@@ -77,3 +77,18 @@ pub uppercase(c) : result
   if isalpha(c)
       return c & %11011111
   return c
+
+pub toint(buf): result | i, c
+  i := 0
+  result := 0
+
+  c := BYTE[buf][i++]
+  repeat until c == 0
+    result *= 10
+    if isnumeric(c)
+      result += c - "0"
+    else
+      quit
+    c := BYTE[buf][i++]
+
+  return result
