@@ -3,7 +3,7 @@ con
 
   DEBUG_BAUD  = 2_000_000
 
-  BUFFER_SIZE = 65536
+  BUFFER_SIZE = 131072
   INPUT_BUFFER_SIZE = 256
 
 var
@@ -14,7 +14,7 @@ var
   BYTE arg1[INPUT_BUFFER_SIZE]
   BYTE arg2[INPUT_BUFFER_SIZE]
   BYTE echo, verify
-
+  LONG actual_buffer_size
 obj
   sd: "deets_sd_spi"
   util: "util"
@@ -24,6 +24,7 @@ obj
 pub main(): result | td, max_td, cmd
   echo := 0
   verify := 0
+  actual_buffer_size := BUFFER_SIZE / 512
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
   banner()
   sd.start_explicit(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED)
@@ -45,6 +46,8 @@ pri mainloop() | cmd
       "d": dump()
       "h": help()
       "f": fill()
+      "i": info()
+      "b": set_actual_buffer_size()
       "w": write_test(1)
       "W": write_test(0)
       other: unknown(cmd)
@@ -59,7 +62,9 @@ pri help()
   serial.fstr0(@"d <number> - Dump contents of block/sector <number>.\r\n")
   serial.fstr0(@"f <text>   - Fill the 64KB write buffer with this fragment.\r\n")
   serial.fstr0(@"             Repeat until full.\r\n")
+  serial.fstr0(@"i          - Display info about current settings.\r\n")
   serial.fstr0(@"v          - Verify mode (read back after write) on.\r\n")
+  serial.fstr0(@"b <blocks> - Set actual buffer size in blocks.\r\n")
   serial.fstr0(@"w <s> <l>  - Write test, single block. Arguments see below.\r\n")
   serial.fstr0(@"W <s> <l>  - Write test, multiple block. Arguments see below.\r\n")
   nl()
@@ -68,6 +73,20 @@ pri help()
   serial.fstr0(@"             They print out the MBit/seconds this took.\r\n")
   serial.fstr0(@"             If verify mode (V>-prompt) is on, the data is.\r\n")
   serial.fstr0(@"             read back and verified against the write buffer.\r\n")
+
+
+pri info()
+    serial.fstr1(@"Verify mode: %s\r\n", verify == 1 ? @"ON" : @"OFF")
+    serial.fstr2(@"Actual buffer size: %d blocks, %d bytes\r\n", actual_buffer_size, actual_buffer_size * 512)
+
+
+pri set_actual_buffer_size()
+  if not numer_of_args() == 1
+    serial.fstr0(@"Set buffer size takes one arguments, <blocks>\r\n")
+    return
+  get_arg(@arg1)
+  actual_buffer_size := toint(@arg1) <# (BUFFER_SIZE / 512)
+  info()
 
 
 pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms, to_write, verify_start
@@ -89,16 +108,16 @@ pri write_test(single_block) | start, length, buffer_pos, ts, elapsed, usdiv, ms
       ts := cnt()
       sd.write_block(start++, @buffer + buffer_pos)
       elapsed += util.timediff(ts, cnt()) / usdiv
-      buffer_pos := (buffer_pos + 512) +// BUFFER_SIZE
+      buffer_pos := (buffer_pos + 512) +// (actual_buffer_size * 512)
   else
     to_write := length
     repeat until to_write == 0
-      if to_write >= BUFFER_SIZE / 512
+      if to_write >= actual_buffer_size
         ts := cnt()
-        sd.write_blocks(start, @buffer, BUFFER_SIZE / 512)
+        sd.write_blocks(start, @buffer, actual_buffer_size)
         elapsed += util.timediff(ts, cnt()) / usdiv
-        start += BUFFER_SIZE / 512
-        to_write -= BUFFER_SIZE / 512
+        start += actual_buffer_size
+        to_write -= actual_buffer_size
       else
         ts := cnt()
         sd.write_blocks(start, @buffer, to_write)
@@ -119,7 +138,7 @@ pri verify_blockdata(start, length) | buffer_offset, differ, offset
     if differ == 1
       serial.fstr2(@"Verification failed at %d, buffer_offset: %d\r\n", --start, buffer_offset + offset)
       return
-    buffer_offset := (buffer_offset + 512) +// BUFFER_SIZE
+    buffer_offset := (buffer_offset + 512) +// (actual_buffer_size * 512)
 
 
 pri block_and_buffer_differ(buffer_address): result | i
@@ -158,7 +177,7 @@ pri dump() | err, block_number, nargs, count
     get_arg(@arg2)
     count := toint(@arg2)
   else
-    count := (BUFFER_SIZE / 512) - 1
+    count := actual_buffer_size
   if util.uppercase(arg1[0]) == "X"
     repeat block_number from 0 to count - 1
       dump_block(@buffer + block_number * 512)
