@@ -8,9 +8,10 @@ con
 var
   BYTE buffer[BUFFER_SIZE]
   BYTE arg1[command.INPUT_BUFFER_SIZE]
+  BYTE arg2[command.INPUT_BUFFER_SIZE]
   BYTE sector[SECTOR_SIZE]
-  LONG input_position
   BYTE echo
+  LONG actual_buffer_size
 obj
   fat: "FAT32"
   util: "util"
@@ -19,6 +20,8 @@ obj
   command: "command"
 
 pub main(): result | cmd
+  actual_buffer_size := BUFFER_SIZE / 512
+
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
   send := @serial.fstr0
   banner()
@@ -39,13 +42,20 @@ pub main(): result | cmd
       0 :
       "l": list()
       "i": info()
+      "f": fill()
+      "b": set_actual_buffer_size()
       "d": dump()
+      "w": write_test(1)
       other: unknown(cmd)
 
 
-pri reset_input_buffer()
-    input_position := 0
-    bytefill(@input_buffer, 0, INPUT_BUFFER_SIZE)
+pri set_actual_buffer_size()
+  if not command.number_of_args() == 1
+    serial.fstr0(@"Set buffer size takes one arguments, <blocks>\r\n")
+    return
+  command.get_arg(@arg1)
+  actual_buffer_size := util.toint(@arg1) <# (BUFFER_SIZE / 512)
+  info()
 
 
 pri prompt() : result
@@ -54,17 +64,40 @@ pri prompt() : result
   return command.read_input(@serial.rxcheck, @serial.tx)
 
 
-pri dump() | err
+pri dump() | err, block_number
   if command.number_of_args() <> 1
-    serial.fstr0(@"dump takes an argument <filename>\r\n")
+    serial.fstr0(@"dump takes an argument <filename> or X for dumping the write buffer.\r\n")
   command.get_arg(@arg1)
   util.strupper(@arg1)
-  err := \fat.openFile(@arg1, "R")
-  if err <> 0
-    serial.fstr0(err)
-    nl()
+
+  if arg1[0] == "X"
+    repeat block_number from 0 to actual_buffer_size - 1
+      util.dump_block(@buffer + block_number * 512, @serial.tx, @serial.fhex)
   else
-    dump_open_file()
+    err := \fat.openFile(@arg1, "R")
+    if err <> 0
+      serial.fstr0(err)
+      nl()
+    else
+      dump_open_file()
+
+
+pri fill() | offset, size
+  if not command.number_of_args() == 1
+    serial.fstr0(@"fill takes one argument, <pattern>\r\n")
+    return
+
+  offset := 0
+  if command.get_arg(@arg1) > 0
+    size := strsize(@arg1)
+    repeat
+      repeat size
+        buffer[offset] := arg1[offset +// size]
+        ++offset
+        if offset == BUFFER_SIZE
+          quit
+      if offset == BUFFER_SIZE
+        quit
 
 
 pri dump_open_file() | count, i
@@ -92,6 +125,45 @@ pri info() | spc
     serial.fstr1(@"Sectors/Cluster: %d\r\n", spc)
     spc := fat.partitionCountOfClusters()
     serial.fstr1(@"Partition Cluster Count: %d\r\n", spc)
+    serial.fstr1(@"Buffer Block Count: %d\r\n", actual_buffer_size)
+
+
+pri write_test(single_block) | length, buffer_pos, ts, elapsed, usdiv, ms, to_write, verify_start
+  if not command.number_of_args() == 2
+    serial.fstr0(@"write test takes two arguments, <filename> and <l>\r\n")
+    return
+  command.get_arg(@arg1)
+  command.get_arg(@arg2)
+  length := util.toint(@arg2)
+
+  serial.fstr2(@"Writing %s, length: %d\r\n", @arg1, length)
+  buffer_pos := 0
+  elapsed := 0
+  usdiv := clkfreq / 1_000_000
+
+  if single_block
+    fat.newFile(@arg1)
+    ts := \fat.openFile(@arg1, "W")
+    if ts <> 0
+      serial.fstr1(@"Error opening file: %s\r\n", ts)
+      return
+    to_write := length
+    repeat until to_write == 0
+      if to_write >= actual_buffer_size
+        ts := cnt()
+        fat.writeData(@buffer, actual_buffer_size * 512)
+        elapsed += util.timediff(ts, cnt()) / usdiv
+        to_write -= actual_buffer_size
+      else
+        ts := cnt()
+        fat.writeData(@buffer, to_write * 512)
+        elapsed += util.timediff(ts, cnt()) / usdiv
+        to_write := 0
+  else
+    serial.fstr0(@"TBD: write several blocks at once")
+
+  ms := elapsed / 1000
+  serial.fstr3(@"Wrote %d bytes in %dus, %dms\r\n", length * 512, elapsed, ms)
 
 
 pri unknown(cmd)
