@@ -92,3 +92,21 @@ pub toint(buf): result | i, c
     c := BYTE[buf][i++]
 
   return result
+
+pub dump_block(buf, serial_tx, serial_fhex) | offset, copy, c
+  offset := 0
+  repeat 32
+    copy := offset
+    repeat 16
+      serial_fhex(BYTE[buf][offset++], 2)
+    serial_tx(" ")
+    repeat 16
+      c := BYTE[buf][copy++]
+      if isalpha(c) or isnumeric(c)
+        serial_tx(c)
+      else
+        serial_tx(".")
+    serial_tx(13)
+    serial_tx(10)
+  serial_tx(13)
+  serial_tx(10)

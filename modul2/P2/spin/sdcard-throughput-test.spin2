@@ -178,7 +178,7 @@ pri dump() | err, block_number, nargs, count
     count := actual_buffer_size
   if util.uppercase(arg1[0]) == "X"
     repeat block_number from 0 to count - 1
-      dump_block(@buffer + block_number * 512)
+      util.dump_block(@buffer + block_number * 512, @serial.tx, @serial.fhex)
   else
     block_number := util.toint(@arg1)
     if nargs == 1
@@ -186,7 +186,7 @@ pri dump() | err, block_number, nargs, count
     serial.fstr1(@"dumping block %d\r\n", block_number)
     repeat count
       read_block(block_number++)
-      dump_block(@read_block_buffer)
+      util.dump_block(@read_block_buffer, @serial.tx, @serial.fhex)
 
 
 pri write_block(): td | earlier, later
@@ -253,23 +253,6 @@ pri unknown(cmd)
 
 pri error()
   serial.fstr0(@"error\r\n")
-
-
-pri dump_block(buf) | offset, copy, c
-  offset := 0
-  repeat 32
-    copy := offset
-    repeat 16
-      serial.fhex(BYTE[buf][offset++], 2)
-    serial.tx(" ")
-    repeat 16
-      c := BYTE[buf][copy++]
-      if util.isalpha(c) or util.isnumeric(c)
-        serial.tx(c)
-      else
-        serial.tx(".")
-    nl()
-  nl()
 
 
 pri banner()
