@@ -1,5 +1,5 @@
 from pyqtgraph import PlotWidget,GraphicsLayoutWidget
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtWidgets, QtWidgets
 import numpy as np
 import pyqtgraph as pg
 import bisect
@@ -13,38 +13,38 @@ class AnalyseViewModel:
         self.tabView = analyseTabView
         self.setUpHandels()
         self.initControls()
-        
+
     def setUpHandels(self):
-        
+
         # get handels
         # combo boxes
-        self.chnComboBox = self.tabView.findChild(QtGui.QComboBox,"chnNumComboBox")
-        self.orientationComboBox = self.tabView.findChild(QtGui.QComboBox,"orientationComboBox")
+        self.chnComboBox = self.tabView.findChild(QtWidgets.QComboBox,"chnNumComboBox")
+        self.orientationComboBox = self.tabView.findChild(QtWidgets.QComboBox,"orientationComboBox")
         # buttons
-        self.resetButton = self.tabView.findChild(QtGui.QPushButton,"resetButton")
-        self.selectRoiButton = self.tabView.findChild(QtGui.QPushButton,"selectRoiButton")
-        self.filterButton = self.tabView.findChild(QtGui.QPushButton,"filterButton")
-        self.analyseButton = self.tabView.findChild(QtGui.QPushButton,"analyseButton")
-        self.massCompButton = self.tabView.findChild(QtGui.QPushButton,"massCompButton")
+        self.resetButton = self.tabView.findChild(QtWidgets.QPushButton,"resetButton")
+        self.selectRoiButton = self.tabView.findChild(QtWidgets.QPushButton,"selectRoiButton")
+        self.filterButton = self.tabView.findChild(QtWidgets.QPushButton,"filterButton")
+        self.analyseButton = self.tabView.findChild(QtWidgets.QPushButton,"analyseButton")
+        self.massCompButton = self.tabView.findChild(QtWidgets.QPushButton,"massCompButton")
         # labels
-        self.preBurnLabel = self.tabView.findChild(QtGui.QLabel,"preBurnLabel")
-        self.postBurnLabel = self.tabView.findChild(QtGui.QLabel,"postBurnLabel")
-        self.startTimeLabel = self.tabView.findChild(QtGui.QLabel,"startTimeLabel")
-        self.stopTimeLabel = self.tabView.findChild(QtGui.QLabel,"stopTimeLabel")
-        self.idtLabel = self.tabView.findChild(QtGui.QLabel,"idtLabel")
-        self.irtLabel = self.tabView.findChild(QtGui.QLabel,"irtLabel")
-        self.atLabel = self.tabView.findChild(QtGui.QLabel,"atLabel")
-        self.btLabel = self.tabView.findChild(QtGui.QLabel,"btLabel")
-        self.maxThrustLabel = self.tabView.findChild(QtGui.QLabel,"maxThrustLabel")
-        self.spImpulsLabel = self.tabView.findChild(QtGui.QLabel,"spImpulsLabel")
-        self.totImpulsLabel = self.tabView.findChild(QtGui.QLabel,"totImpulsLabel")
+        self.preBurnLabel = self.tabView.findChild(QtWidgets.QLabel,"preBurnLabel")
+        self.postBurnLabel = self.tabView.findChild(QtWidgets.QLabel,"postBurnLabel")
+        self.startTimeLabel = self.tabView.findChild(QtWidgets.QLabel,"startTimeLabel")
+        self.stopTimeLabel = self.tabView.findChild(QtWidgets.QLabel,"stopTimeLabel")
+        self.idtLabel = self.tabView.findChild(QtWidgets.QLabel,"idtLabel")
+        self.irtLabel = self.tabView.findChild(QtWidgets.QLabel,"irtLabel")
+        self.atLabel = self.tabView.findChild(QtWidgets.QLabel,"atLabel")
+        self.btLabel = self.tabView.findChild(QtWidgets.QLabel,"btLabel")
+        self.maxThrustLabel = self.tabView.findChild(QtWidgets.QLabel,"maxThrustLabel")
+        self.spImpulsLabel = self.tabView.findChild(QtWidgets.QLabel,"spImpulsLabel")
+        self.totImpulsLabel = self.tabView.findChild(QtWidgets.QLabel,"totImpulsLabel")
         # line edits
-        self.windowLineEdit = self.tabView.findChild(QtGui.QLineEdit,"windowLineEdit")
-        self.orderLineEdit = self.tabView.findChild(QtGui.QLineEdit,"orderLineEdit")
-        self.fuelMassLineEdit = self.tabView.findChild(QtGui.QLineEdit,"fuelMassLineEdit")
+        self.windowLineEdit = self.tabView.findChild(QtWidgets.QLineEdit,"windowLineEdit")
+        self.orderLineEdit = self.tabView.findChild(QtWidgets.QLineEdit,"orderLineEdit")
+        self.fuelMassLineEdit = self.tabView.findChild(QtWidgets.QLineEdit,"fuelMassLineEdit")
         # check boxes
-        self.massCompCheckBox = self.tabView.findChild(QtGui.QCheckBox,"massCompCheckBox")
-        self.calcMassCheckBox = self.tabView.findChild(QtGui.QCheckBox,"calcMassCheckBox")
+        self.massCompCheckBox = self.tabView.findChild(QtWidgets.QCheckBox,"massCompCheckBox")
+        self.calcMassCheckBox = self.tabView.findChild(QtWidgets.QCheckBox,"calcMassCheckBox")
         # graph view
         self.graphView = self.tabView.findChild(GraphicsLayoutWidget,"analyseGraphView")
         self.roi = None
@@ -71,7 +71,7 @@ class AnalyseViewModel:
 
         scale = float(self.config.chnConfigs[chnNum-1].scale)
         offset = float(self.config.chnConfigs[chnNum-1].offset)
-        self.y_ = self.y * scale + offset    
+        self.y_ = self.y * scale + offset
         self.curve.setData(y=self.y_,x=self.x)
         if self.roi is None:
             self.roi = pg.LinearRegionItem([min(self.x),max(self.x)])
@@ -84,11 +84,11 @@ class AnalyseViewModel:
         self.selectRoiButton.show()
         if self.inf1 is not None:
             self.inf1.hide()
-            self.inf2.hide()  
+            self.inf2.hide()
 
     def initGraph(self):
         win: GraphicsLayoutWidget = self.graphView
-        self.Plt = win.addPlot(title="",col=0,row=0)    
+        self.Plt = win.addPlot(title="",col=0,row=0)
         self.curve = self.Plt.plot(pen=(1,2*1.3))
 
     def selectRegions(self):
@@ -148,9 +148,9 @@ class AnalyseViewModel:
                 self.stopTimeLabel.setText("{:.2f}".format(self.stopTime))
                 break
         if self.inf1 is None:
-            self.inf1 = pg.InfiniteLine(angle=90, label='start time={:1.2f}'.format(self.startTime), 
+            self.inf1 = pg.InfiniteLine(angle=90, label='start time={:1.2f}'.format(self.startTime),
                        labelOpts={'position':0.1, 'color': (200,200,100), 'fill': (200,200,200,50), 'movable': True})
-            self.inf2 = pg.InfiniteLine(angle=90, label='stop time={:1.2f}'.format(self.stopTime), 
+            self.inf2 = pg.InfiniteLine(angle=90, label='stop time={:1.2f}'.format(self.stopTime),
                        labelOpts={'position':0.1, 'color': (200,200,100), 'fill': (200,200,200,50), 'movable': True})
             self.Plt.addItem(self.inf1)
             self.Plt.addItem(self.inf2)
@@ -162,7 +162,7 @@ class AnalyseViewModel:
             self.inf1.show()
             self.inf2.show()
         self.roi.hide()
-        #self.curve.setData(fillLevel = min(self.y_))        
+        #self.curve.setData(fillLevel = min(self.y_))
 
     def updateGraph(self):
         self.curve.setData(x=self.x,y=self.y_)
@@ -254,9 +254,4 @@ class AnalyseViewModel:
         self.y_[:idx0] = self.y_[:idx0] - self.preBurnValue
         self.y_[idx0:idx1] = S - m      - self.preBurnValue
         self.y_[idx1:] = self.y_[idx1:] - self.postBurnValue
-        self.updateGraph()        
-
-
-        
-
-        
+        self.updateGraph()

@@ -2,7 +2,7 @@ from pyqtgraph import PlotWidget,GraphicsLayoutWidget
 import numpy as np
 import pyqtgraph as pg
 from Model.streamManager import StreamManager
-from PyQt5 import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 class CalibGraphViewModel(QtCore.QObject):
     # signals
@@ -16,20 +16,20 @@ class CalibGraphViewModel(QtCore.QObject):
         self.initGraph()
         self.graphTimer = QtCore.QTimer()
         self.graphTimer.timeout.connect(self.updateGraph)
-        self.graphTimer.start(1000)   
+        self.graphTimer.start(1000)
 
     def setUpControlHandels(self):
         # get handels
-        self.comboBox = self.controlls.findChild(QtGui.QComboBox,"channelComboBox")
-        self.referenceValue = self.controlls.findChild(QtGui.QLineEdit,"referenceLineEdit")
-        self.addValueButton = self.controlls.findChild(QtGui.QPushButton,"addValueButton")
-        self.clearButton = self.controlls.findChild(QtGui.QPushButton,"clearButton")
-        self.applyButton = self.controlls.findChild(QtGui.QPushButton,"applyButton")
-        self.table = self.controlls.findChild(QtGui.QTableWidget,"tableWidget")
-        self.scaleText = self.controlls.findChild(QtGui.QLabel,"scaleOutLabel")
-        self.offsetText = self.controlls.findChild(QtGui.QLabel,"offsetOutLabel")
-        self.rawSigmaText = self.controlls.findChild(QtGui.QLabel,"rawSigmaOutLabel")
-        self.scaledSigmaText = self.controlls.findChild(QtGui.QLabel,"scaledSigmaOutLabel")
+        self.comboBox = self.controlls.findChild(QtWidgets.QComboBox,"channelComboBox")
+        self.referenceValue = self.controlls.findChild(QtWidgets.QLineEdit,"referenceLineEdit")
+        self.addValueButton = self.controlls.findChild(QtWidgets.QPushButton,"addValueButton")
+        self.clearButton = self.controlls.findChild(QtWidgets.QPushButton,"clearButton")
+        self.applyButton = self.controlls.findChild(QtWidgets.QPushButton,"applyButton")
+        self.table = self.controlls.findChild(QtWidgets.QTableWidget,"tableWidget")
+        self.scaleText = self.controlls.findChild(QtWidgets.QLabel,"scaleOutLabel")
+        self.offsetText = self.controlls.findChild(QtWidgets.QLabel,"offsetOutLabel")
+        self.rawSigmaText = self.controlls.findChild(QtWidgets.QLabel,"rawSigmaOutLabel")
+        self.scaledSigmaText = self.controlls.findChild(QtWidgets.QLabel,"scaledSigmaOutLabel")
 
         # set up comboBox
         self.comboBox.addItems(["Channel {}".format(num) for num in range(1,9,1)])
@@ -44,7 +44,7 @@ class CalibGraphViewModel(QtCore.QObject):
 
     def initGraph(self):
         win: GraphicsLayoutWidget = self.view
-        self.Plt = win.addPlot(title="",col=0,row=0)    
+        self.Plt = win.addPlot(title="",col=0,row=0)
         self.histPlot = self.Plt.plot(pen=(1,2*1.3),stepMode=True)
         self.normalDist = self.Plt.plot(pen=(2,2*1.3))
         self.mu = None
@@ -59,9 +59,9 @@ class CalibGraphViewModel(QtCore.QObject):
         if (self.mu is not None):
             rowPosition = self.table.rowCount()
             self.table.insertRow(rowPosition)
-            self.table.setItem(rowPosition , 0, QtGui.QTableWidgetItem("{}".format(self.mu)))
-            self.table.setItem(rowPosition , 1, QtGui.QTableWidgetItem("{}".format(self.s)))
-            self.table.setItem(rowPosition , 2, QtGui.QTableWidgetItem("{}".format(refValue)))
+            self.table.setItem(rowPosition , 0, QtWidgets.QTableWidgetItem("{}".format(self.mu)))
+            self.table.setItem(rowPosition , 1, QtWidgets.QTableWidgetItem("{}".format(self.s)))
+            self.table.setItem(rowPosition , 2, QtWidgets.QTableWidgetItem("{}".format(refValue)))
             self.samples[0].append(self.mu)
             self.samples[1].append(refValue)
             self.samples[2].append(self.s)
@@ -105,5 +105,5 @@ class CalibGraphViewModel(QtCore.QObject):
                 y_nd = 1/(2*s**2*np.pi)**0.5 * np.e**(-(x_h-mu)**2/(2*s**2))
                 self.histPlot.setData(x_h,y_h)
                 self.normalDist.setData(x_h,y_nd)
-      
+
                 #print("unified plt item:",type(self.plotAxis[-1]))
