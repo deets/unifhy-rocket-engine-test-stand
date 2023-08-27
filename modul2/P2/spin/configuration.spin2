@@ -40,6 +40,19 @@ con
 
   DEBUG_PIN = 22
 
+  CAPTURE_SWITCH = 27
+
+  SD_STATUS_PIN = 25
+  SYSTEM_STATUS_PIN = 24
+
+  ADC_CLK = 16
+  ADC_SDO = 17
+  ADC_SDI = 18
+  ADC_DRDY = 19
+  ADC_CS = 20
+  ADC_PDWN = 21
+
+
 #ELSE
 #ERROR "Please specify target board - P2EVAL or UNIHFY"
 #ENDIF

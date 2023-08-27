@@ -99,7 +99,7 @@ pri setup_adc()
   ' 7500/s
   'adc.wreg(adc.RDRATE, %11010000)
   adc.set_sample_rate(adc.SR_2_5)
-#ELSEIFDEF UNIFHY
+#ELSEIFDEF UNIHFY
   ' Here comes the setup for the MUX-buffer
   ' and PGA
 #ELSE
