@@ -32,6 +32,7 @@ obj
   fat: "FAT32"
   util: "util"
   status: "status"
+  conf: "configuration"
 
 pub start(store_, available_, fetch_, set_sd_state_) : result
   store := store_
@@ -47,7 +48,7 @@ pri main(caller_cog_) | success
   set_sd_state(status.SD_ERROR)
 
   caller_cog := caller_cog_
-  success := fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
+  success := fat.Start(SD_DO, SD_CLK, SD_DI, SD_CS, conf.SD_SPI_SPEED, 0)
   debug(zstr(string("fatenginestart:")))
   debug(udec(success))
   cogatn(1 << caller_cog)

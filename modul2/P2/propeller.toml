@@ -1,20 +1,24 @@
 [project]
-#main-file="spin/switched-frontend.spin2"
+main-file="spin/switched-frontend.spin2"
 #main-file="spin/serial-frontend.spin2"
 #main-file="spin/ads-test.spin2"
 #main-file="spin/fat-test.spin2"
 #main-file="spin/numerical-test.spin2"
-main-file="spin/fat-explorer.spin2"
+#main-file="spin/hdmi.spin2"
+#main-file="spin/fat-explorer.spin2"
 #main-file="spin/sdcard-throughput-test.spin2"
+#main-file="c/test.c"
+#main-file="spin/hyper_ringbuffer_test.spin2"
+#main-file="spin/test-serial.spin2"
 libraries=[
 ]
 
 [propeller]
-kind="P2"
+kind="P2CC"
 serial-device="/dev/serial/by-id/usb-Parallax_Inc_Propeller_P2-EVAL_PLX4L28HW-if00-port0"
 #serial-device="/dev/serial/by-id/usb-PROPPLUG_PROPPLUG_BLACK_BLACK-if00-port0"
 #serial-device="~esp/uarts/prop-plug-black"
-
+#serial-device="/dev/cu.usbserial-PLX4L28HW"
 [defines]
 # Define which board we are targeting
 P2EVAL=""
