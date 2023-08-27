@@ -4,9 +4,9 @@ con
   ' A propplug on a header
   RX0     = 11
   TX0     = 13
-  BR_SERIAL = 1_000_000
+  BR_SERIAL = 230_400
 
-  DEBUG_BAUD  = 2_000_000
+  DEBUG_BAUD  = 230_400
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
   BUFFER_CAPACITY = 7500 * 3 '16_000_000 / DATAGRAM_SIZE
@@ -79,7 +79,7 @@ pub main() | timestamp, mux, value, reader_cog, h, start, use_sd, count
 
   repeat
     use_sd := waitpins()
-        rb.reset()
+    rb.reset()
     rb.fill(@fill_buffer, @fill_buffer_end - @fill_buffer)
     debug("start ", udec(use_sd))
     values_read := 0
@@ -164,7 +164,7 @@ pri stop_fat()
   fat.closeFile()
 
 pri start_fat() | success
-  fat.FATEngineStart(SD_DO, SD_CLK, SD_DI, SD_CS, 0)
+  fat.start(SD_DO, SD_CLK, SD_DI, SD_CS, 15_000_000, 0, @serial.fstr1)
   debug(zstr(string("mount:")))
   success := \fat.mountPartition(0)
   if success > 0

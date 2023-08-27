@@ -23,9 +23,9 @@ pub main(): result | cmd
   actual_buffer_size := BUFFER_SIZE / 512
 
   serial.start(conf.RX0, conf.TX0, %0000, conf.BR_SERIAL)
-  send := @serial.fstr0
+  send := @serial.fstr1
   banner()
-  result := fat.start(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED, 0)
+  result := fat.start(conf.SD_DO, conf.SD_CLK, conf.SD_DI, conf.SD_CS, conf.SD_SPI_SPEED, 0, @serial.fstr1)
   if result == -1
     serial.fstr0(string("Error starting"))
     repeat
@@ -142,12 +142,17 @@ pri write_test(single_block) | length, buffer_pos, ts, elapsed, usdiv, ms, to_wr
   usdiv := clkfreq / 1_000_000
 
   if single_block
-    fat.newFile(@arg1)
+    ' Check file doesn't exist, if not, create it
+    \fat.listEntry(@arg1)
+    if fat.listSize() == 0
+      fat.newFile(@arg1)
     ts := \fat.openFile(@arg1, "W")
     if ts <> 0
       serial.fstr1(@"Error opening file: %s\r\n", ts)
       return
     to_write := length
+    fat.writeData(@buffer, 13)
+    fat.writeData(@buffer, 27)
     repeat until to_write == 0
       if to_write >= actual_buffer_size
         ts := cnt()
@@ -159,6 +164,7 @@ pri write_test(single_block) | length, buffer_pos, ts, elapsed, usdiv, ms, to_wr
         fat.writeData(@buffer, to_write * 512)
         elapsed += util.timediff(ts, cnt()) / usdiv
         to_write := 0
+    fat.closeFile()
   else
     serial.fstr0(@"TBD: write several blocks at once")
 
