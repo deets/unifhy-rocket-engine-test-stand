@@ -22,4 +22,5 @@ serial-device="/dev/serial/by-id/usb-Parallax_Inc_Propeller_P2-EVAL_PLX4L28HW-if
 [defines]
 # Define which board we are targeting
 P2EVAL=""
+#USE_HYPERRAM=""
 #UNIHFY=""

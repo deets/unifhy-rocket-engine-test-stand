@@ -7,7 +7,12 @@ con
   SERIAL_BUFFER_SIZE = 1024
 
   DATAGRAM_SIZE = 8 ' two longs, timestamp:mux:value
+#ifdef USE_HYPERRAM
   BUFFER_CAPACITY = 16_000_000 / DATAGRAM_SIZE
+#else
+  BUFFER_CAPACITY = 380_000 / DATAGRAM_SIZE
+#endif
+
   DEBUG_BAUD = 2_000_000
 
 var
@@ -22,18 +27,28 @@ var
   BYTE mux_buffer_length
   ' Some statistical values from the last CDAC run
   LONG total_samples, avg_timediff, max_timediff, max_sample
-
+#ifndef USE_HYPERRAM
+  BYTE ringbuffer_data[BUFFER_CAPACITY * DATAGRAM_SIZE]
+#endif
 obj
   conf: "configuration"
   status: "status"
   adc: "buffered_ads1256"
   sdwriter: "sdwriter"
+#ifdef USE_HYPERRAM
   rb: "hyper_ringbuffer"
+#else
+  rb: "ringbuffer"
+#endif
 
 pub main()
   status.setup(BUFFER_CAPACITY)
   setup_adc()
+#ifdef USE_HYPERRAM
   rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, 0)
+#else
+  rb.init(DATAGRAM_SIZE, BUFFER_CAPACITY, @ringbuffer_data)
+#endif
   sdwriter.start(@rb.store, @rb.available, @rb.fetch, @status.set_sd_state)
 
   DEBUG("switched frontend")
